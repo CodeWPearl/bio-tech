@@ -57,5 +57,8 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Markdown docs (kept local, never pushed)
+*.md
+
 # Keep placeholder files so the directory tree is tracked
 !.gitkeep
