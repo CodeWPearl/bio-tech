@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cancer-mutation-pathogenicity"
+version = "0.1.0"
+description = "Multi-omics deep learning for predicting pathogenicity of cancer-associated gene mutations"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Cancer Mutation Pathogenicity Team" }]
+keywords = ["bioinformatics", "deep-learning", "multi-omics", "cancer", "pathogenicity"]
+dynamic = ["dependencies"]
+
+[project.scripts]
+train = "scripts.train:main"
+evaluate = "scripts.evaluate:main"
+inference = "scripts.inference:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "scripts*"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = true

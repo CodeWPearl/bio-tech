@@ -1,0 +1,61 @@
+# Byte-compiled / optimized / cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment / secrets
+.env
+.env.*
+
+# Experiment tracking
+mlruns/
+mlflow.db
+
+# Model checkpoints
+*.ckpt
+*.pt
+*.pth
+results/checkpoints/*
+
+# Data files (kept dirs via .gitkeep)
+data/raw/*
+data/processed/*
+data/splits/*
+*.csv
+*.tsv
+*.gz
+*.vcf
+*.parquet
+*.h5
+*.npy
+*.npz
+
+# Logs
+results/logs/*.log
+*.log
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Keep placeholder files so the directory tree is tracked
+!.gitkeep

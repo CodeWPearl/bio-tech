@@ -1,0 +1,35 @@
+data:
+  clinvar_url: "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz"
+  cbioportal_url: "https://www.cbioportal.org/api"
+  studies:
+    - "brca_tcga_pan_can_atlas_2018"
+    - "luad_tcga_pan_can_atlas_2018"
+    - "coadread_tcga_pan_can_atlas_2018"
+    - "ucec_tcga_pan_can_atlas_2018"
+    - "ov_tcga_pan_can_atlas_2018"
+  test_size: 0.15
+  val_size: 0.15
+  random_seed: 42
+
+model:
+  mutation_embed_dim: 128
+  expression_embed_dim: 256
+  methylation_embed_dim: 128
+  cnv_embed_dim: 64
+  fusion_dim: 256
+  num_classes: 4
+  dropout: 0.3
+  fusion_type: "cross_attention"  # early, late, attention, cross_attention, transformer
+
+training:
+  max_epochs: 100
+  batch_size: 64
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  patience: 15
+  focal_loss_gamma: 2.0
+  num_workers: 4
+
+experiment:
+  name: "default"
+  tracking_uri: "mlruns"
