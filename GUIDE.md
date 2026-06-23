@@ -210,6 +210,101 @@ git commit -m "message"   # save a snapshot with a short description
 > what to do next. **Newest at the top.** This section is updated at the end of
 > every session.
 
+### Session 8 — Multi-omics fusion strategies — *2026-06-23*
+
+**Goal:** Build the five fusion modules that combine the per-modality
+embeddings (produced by Session 7's encoders) into a single representation
+the classifier can use for pathogenicity prediction.
+
+**Plain-English background (what the new words mean):**
+- **Fusion** — combining information from multiple data sources (modalities)
+  into one unified representation. The question is *how* to combine them —
+  different strategies capture different kinds of interactions between the
+  modalities.
+- **Early fusion (concatenation)** — the simplest approach: glue all the
+  embeddings end-to-end into one long vector, then project it down. Fast
+  and surprisingly effective as a baseline.
+- **Late fusion (weighted average)** — each modality makes its own
+  independent prediction, then a learned weighted average combines them.
+  Good for interpretability (you can see what each modality "thinks").
+- **Attention fusion** — all modality embeddings "look at" each other via
+  self-attention to decide which modalities matter most. Saves attention
+  weights for interpretability.
+- **Cross-attention fusion** — the most expressive strategy and the paper's
+  primary contribution. Each modality attends to every other modality via
+  pairwise cross-attention (Q from one, K/V from all), capturing rich
+  inter-modal interactions.
+- **Transformer fusion** — adds learned modality-type embeddings and a
+  [CLS] token, then runs a full 2-layer Transformer encoder. The [CLS]
+  output is the fused representation.
+- **Modality mask** — a per-sample boolean vector indicating which
+  modalities are present. Missing modalities are masked out in attention
+  (set to -inf) or zeroed before concatenation, so the model gracefully
+  handles incomplete data.
+
+**What was created/changed:**
+- `src/models/fusion/early_fusion.py` — **EarlyFusion(nn.Module)**:
+  zero-masks absent modality embeddings, concatenates along feature dim,
+  Linear projection → BatchNorm → ReLU → Dropout → (batch, fusion_dim).
+
+- `src/models/fusion/late_fusion.py` — **LateFusion(nn.Module)**:
+  per-modality classification heads (Linear → ReLU → Dropout → Linear),
+  learnable softmax-normalised weights, masked weighted average. Returns
+  dict with ``fused`` logits and ``per_modality`` logits for
+  interpretability.
+
+- `src/models/fusion/attention_fusion.py` — **AttentionFusion(nn.Module)**:
+  projects all embeddings to shared dimension, stacks as sequence,
+  4-head MultiheadAttention with key_padding_mask for missing modalities,
+  residual + LayerNorm, masked mean pooling → output projection. Saves
+  ``attention_weights`` for interpretability.
+
+- `src/models/fusion/cross_attention.py` — **CrossAttentionFusion(nn.Module)**:
+  each modality gets its own MultiheadAttention module — Q from self, K/V
+  from all modalities. Residual + LayerNorm per modality, masked mean
+  pooling → output projection. Most expressive fusion.
+
+- `src/models/fusion/transformer_fusion.py` — **TransformerFusion(nn.Module)**:
+  projects to shared dim, adds learned modality-type embeddings, prepends
+  [CLS] token, 2-layer Transformer encoder with modality mask as padding
+  mask, LayerNorm on [CLS] output → (batch, fusion_dim).
+
+- `src/models/fusion/__init__.py` — exports all 5 fusion classes.
+
+- `tests/test_fusion.py` — **35 new tests** (now 242 total) covering:
+  - Every fusion: correct output shape with all modalities present.
+  - Every fusion: correct output shape with 2 of 5 modalities absent.
+  - Every fusion: gradient flows through all trainable parameters.
+  - AttentionFusion: attention weights sum to ~1.0 (eval mode).
+  - AttentionFusion: attention weight tensor shape matches expectations.
+  - LateFusion: per-modality outputs present for all modalities.
+  - LateFusion: modality weights are learnable.
+  - CrossAttentionFusion: per-modality cross-attention modules exist.
+  - TransformerFusion: [CLS] token and modality embeddings have correct shape.
+  - All fusions (except Late): parametrised fusion_dim tests (64, 128, 512).
+
+**Commands run this session (and what they did):**
+```powershell
+# Ran all 35 fusion tests:
+python -m pytest tests/test_fusion.py -v   # → 35 passed in ~7 seconds
+
+# Ran the full test suite (all modules):
+python -m pytest tests/ -v                 # → 242 passed in ~30 seconds
+```
+
+> ℹ️ **No new tools to install:** the fusion modules use only `torch`
+> (PyTorch), which was installed in Session 6.
+
+**Status:** ✅ Done and verified — all 242 tests pass; all 5 fusion
+strategies produce correct output shapes, handle missing modalities,
+and gradients flow through every parameter.
+
+**What's next (Session 9):** Build the full `MultiOmicsClassifier` model
+that wires encoders → fusion → classification head, and the PyTorch
+Lightning training module with focal loss and evaluation metrics.
+
+---
+
 ### Session 7 — Modality encoders — *2026-06-23*
 
 **Goal:** Build all the per-modality neural network encoders that compress each
