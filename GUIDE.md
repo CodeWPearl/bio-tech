@@ -210,6 +210,139 @@ git commit -m "message"   # save a snapshot with a short description
 > what to do next. **Newest at the top.** This section is updated at the end of
 > every session.
 
+### Session 10 — Training infrastructure — *2026-06-23*
+
+**Goal:** Build the complete PyTorch Lightning training infrastructure —
+loss functions, learning rate schedulers, training callbacks, the Lightning
+module that wraps the full model, and the training script that ties everything
+together for reproducible experiment runs.
+
+**Plain-English background (what the new words mean):**
+- **Focal loss** — a smarter version of cross-entropy loss designed for
+  class imbalance. It adds a factor (1-p)^γ that **down-weights easy
+  examples** (ones the model is already confident about) and **focuses
+  training on hard examples** (ones the model is unsure of). The γ
+  parameter controls how much focus shifts to hard examples (γ=0 is
+  standard cross-entropy, γ=2 is the typical default).
+- **Weighted cross-entropy** — a simpler imbalance strategy: each class
+  gets a weight inversely proportional to how many samples it has. Rare
+  classes get higher weight, so errors on them count more.
+- **Learning rate scheduler** — automatically adjusts the learning rate
+  during training. Starting high helps the model learn fast; lowering it
+  later helps it converge precisely. We support three strategies:
+  - *Cosine annealing with warm restarts* — the LR follows a cosine curve
+    that periodically resets, letting the model escape local minima.
+  - *Reduce on plateau* — monitors validation AUROC; if it stops improving
+    for N epochs, halves the learning rate.
+  - *One-cycle* — ramps the LR up then down in a single cycle. Often
+    trains faster than constant LR.
+- **Lightning module** — a PyTorch Lightning class that packages the model,
+  loss function, optimiser, and metrics into one object. Lightning handles
+  the training loop, GPU management, checkpointing, and logging — we just
+  define what happens at each step.
+- **torchmetrics** — a library for computing ML metrics (accuracy, F1,
+  AUROC, precision, recall, MCC) that correctly handles distributed
+  training and epoch-level accumulation.
+- **MCC (Matthews Correlation Coefficient)** — a balanced measure of
+  classification quality that accounts for all four confusion-matrix
+  cells. Values range from -1 (total disagreement) to +1 (perfect).
+  Better than accuracy for imbalanced datasets.
+- **Callbacks** — plug-in functions that run at specific points during
+  training (e.g. after each epoch). We use them for MLflow logging,
+  gradient monitoring, and early stopping.
+- **Gradient monitoring** — tracking the magnitude of gradients during
+  training. Exploding gradients (too large) cause instability; vanishing
+  gradients (too small) stop learning. The monitor logs norms and warns
+  if either happens.
+- **Early stopping** — automatically halting training when validation
+  performance stops improving, to prevent overfitting and save time.
+- **ModelCheckpoint** — saves the model weights at the best validation
+  scores so you can resume or evaluate the best version later.
+
+**What was created/changed:**
+- `src/training/losses.py`:
+  - **FocalLoss(nn.Module)** — FL(p_t) = -α_t(1-p_t)^γ log(p_t). Accepts
+    per-class alpha weights and configurable gamma. Supports mean/sum/none
+    reduction. With γ=0 matches standard cross-entropy exactly.
+  - **WeightedCrossEntropy(nn.Module)** — wraps nn.CrossEntropyLoss with
+    automatic inverse-frequency weight computation from label counts.
+
+- `src/training/scheduler.py` — **get_scheduler(optimizer, config)**: factory
+  that returns one of three LR schedulers based on config:
+  - CosineAnnealingWarmRestarts (T_0, T_mult configurable)
+  - ReduceLROnPlateau (monitors val_auroc, mode=max)
+  - OneCycleLR (for step-level scheduling)
+
+- `src/training/callbacks.py`:
+  - **MetricLogger** — forwards all trainer metrics to MLflow at each
+    validation epoch end.
+  - **GradientMonitor** — logs per-layer and total gradient L2 norms every
+    N steps, warns on exploding (>100) or vanishing (<1e-7) gradients.
+  - **EarlyStoppingWithPatience** — wraps Lightning's EarlyStopping on
+    val_auroc (mode=max) with logging of wait count and best score.
+
+- `src/training/lightning_module.py` —
+  **PathogenicityLightningModule(LightningModule)**:
+  - Wraps PathogenicityPredictor with configurable loss (focal/weighted_ce/ce)
+  - Expands the 3-element modality mask to 5 elements (mutation + clinical
+    always present)
+  - training_step: forward + loss + train_accuracy logging
+  - validation_step: forward + loss + all 6 metrics (accuracy, F1, AUROC,
+    precision, recall, MCC)
+  - test_step: same as validation but with test_ prefix
+  - configure_optimizers: AdamW + LR scheduler from config
+  - Works with all 5 fusion types
+
+- `scripts/train.py` — **Full training entry point** (replaced stub):
+  - Parses CLI args: --config, --experiment_name, --gpus, --override
+  - Loads config, seeds everything, initialises DataModule + model
+  - Sets up MLflow logger + 5 callbacks (ModelCheckpoint, EarlyStopping,
+    LRMonitor, GradientMonitor, MetricLogger)
+  - trainer.fit() + trainer.test(ckpt_path="best")
+  - Saves final metrics to results/tables/final_metrics.json
+
+- `configs/default.yaml` — added training keys: loss_type, scheduler_type,
+  cosine_t0, cosine_t_mult, scheduler_patience, scheduler_factor.
+
+- `src/training/__init__.py` — exports all training classes and functions.
+
+- `tests/test_training.py` — **36 new tests** (now 337 total) covering:
+  - FocalLoss: scalar output, gradient flow, gamma=0 matches CE, alpha
+    weights, gamma increases focus, reduction none/sum.
+  - WeightedCrossEntropy: scalar output, from label counts, no weights.
+  - Scheduler: all 3 types created correctly, unknown type raises.
+  - Callbacks: creation and configuration checks.
+  - Lightning module: training_step runs, gradients flow, validation
+    metrics computed, test_step runs, configure_optimizers works, all 3
+    loss types, all 5 fusion types, mask expansion, unknown loss raises.
+  - Full training loop: 2-epoch train completes, train+test completes,
+    validation metrics present after training.
+
+**Commands run this session (and what they did):**
+```powershell
+# Ran all 36 new training tests:
+python -m pytest tests/test_training.py -v   # → 36 passed in ~21 seconds
+
+# Ran the full test suite (all modules):
+python -m pytest tests/ -v                   # → 337 passed in ~58 seconds
+```
+
+> ℹ️ **No new tools to install:** the training module uses `pytorch-lightning`,
+> `torchmetrics`, and `mlflow` — all already in `requirements.txt`.
+> `torchmetrics` is a dependency of `pytorch-lightning`.
+
+**Status:** ✅ Done and verified — all 337 tests pass; the training
+infrastructure works end-to-end with all fusion types, all loss functions,
+and all scheduler types. Full 2-epoch training loops complete on synthetic
+data with correct metric computation.
+
+**What's next (Session 11):** Build `scripts/evaluate.py` — the evaluation
+script that loads a trained checkpoint, runs it on the test set, computes
+comprehensive metrics, generates confusion matrices and ROC curves, and
+saves publication-ready figures.
+
+---
+
 ### Session 9 — Assembled model + classification head — *2026-06-23*
 
 **Goal:** Wire together all the per-modality encoders (Session 7) and fusion
