@@ -210,6 +210,123 @@ git commit -m "message"   # save a snapshot with a short description
 > what to do next. **Newest at the top.** This section is updated at the end of
 > every session.
 
+### Session 7 — Modality encoders — *2026-06-23*
+
+**Goal:** Build all the per-modality neural network encoders that compress each
+feature vector into a compact, learned embedding — the step between "clean
+feature array" and "fusion/prediction."
+
+**Plain-English background (what the new words mean):**
+- **Encoder** — a small neural network that takes a long vector of numbers
+  (like 2000 gene-expression values) and squeezes it down to a much shorter
+  "embedding" vector (like 256 numbers). The network learns *which* of the
+  original 2000 numbers matter most. Each data type (mutation, expression,
+  methylation, CNV) gets its own encoder.
+- **MLP (Multi-Layer Perceptron)** — the simplest kind of neural network: a
+  stack of layers where every neuron connects to every neuron in the next
+  layer. Input → hidden layer(s) → output. Good enough for smaller inputs.
+- **Transformer** — a fancier architecture that uses **attention** to let
+  different parts of the input "talk to each other" and decide what's
+  important. Originally invented for language (GPT), but works great on any
+  sequence-like data.
+- **Autoencoder** — a network that first compresses the input to a small
+  bottleneck (the embedding), then tries to reconstruct the original input
+  from just that bottleneck. If it reconstructs well, the bottleneck must
+  contain the essential information.
+- **Variational Autoencoder (VAE)** — like an autoencoder, but the bottleneck
+  is a *probability distribution* instead of a single point. During training
+  it samples from that distribution, which helps it learn smoother, more
+  generalizable representations. Returns `(z, mu, logvar)` for the KL
+  divergence loss.
+- **[CLS] token** — a special learnable "summary" token prepended to a
+  sequence before feeding it to a Transformer. After the Transformer
+  processes the sequence, the CLS token's output is treated as the
+  embedding of the whole sequence.
+- **BatchNorm** — normalises each mini-batch during training to keep values
+  in a healthy range. Note: requires batch size > 1 in training mode.
+- **Dropout** — randomly sets a fraction of neurons to zero during training,
+  forcing the network to not rely on any single neuron. Prevents
+  overfitting.
+- **BaseModel** — an abstract base class that all encoders inherit from.
+  Provides shared utilities like `count_parameters()`, `get_device()`, and
+  `get_output_dim()`.
+
+**What was created/changed:**
+- `src/models/base.py` — **BaseModel(nn.Module)**: abstract base class
+  requiring every encoder to implement `encode()` and `forward()`. Provides
+  `count_parameters()`, `get_device()`, `get_output_dim()`.
+
+- `src/models/encoders/mutation_encoder.py`:
+  - **MutationEncoder** — 2-layer MLP: Linear(input→256) → BatchNorm → ReLU
+    → Dropout(0.3) → Linear(256→embed_dim) → BatchNorm → ReLU →
+    Dropout(0.2). Works with any input size.
+  - **MutationTransformerEncoder** — splits the 42-feature mutation vector
+    into 4 semantic groups (variant type, AA properties, gene features,
+    positional), projects each to a token, adds a [CLS] token, runs a
+    2-layer / 4-head Transformer, returns [CLS] output.
+
+- `src/models/encoders/expression_encoder.py`:
+  - **DenseAutoencoder** — encoder: 2000→512→256; decoder: 256→512→2000.
+    `encode()` returns the bottleneck; `forward()` returns both embedding
+    and reconstruction (for pretraining).
+  - **VariationalAutoencoder** — encoder: 2000→512→(mu:256, logvar:256);
+    reparameterization trick; decoder: 256→512→2000. `forward()` returns
+    embedding, mu, logvar, reconstruction. Stochastic — sampling differs
+    each call.
+  - **ExpressionTransformerEncoder** — chunks 2000 genes into 40 groups of
+    50, projects each to embed_dim, [CLS] + 4-layer / 8-head Transformer,
+    [CLS] output → 256-dim. Handles non-divisible input dims via padding.
+
+- `src/models/encoders/methylation_encoder.py`:
+  - **MethylationDenseAutoencoder** — same architecture as expression
+    autoencoder but with independent batch normalisation statistics and
+    default embed_dim=128.
+  - **MethylationVAE** — same architecture as expression VAE, independent
+    parameters, default embed_dim=128.
+  - **MethylationTransformerEncoder** — same architecture as expression
+    Transformer, independent parameters, default embed_dim=128.
+
+- `src/models/encoders/cnv_encoder.py`:
+  - **CNVFCEncoder** — 3-layer MLP: Input→128→64→embed_dim. Simple and fast
+    for the relatively small CNV feature vectors.
+  - **CNVAttentionEncoder** — treats each gene's CNV value as a 1-D token,
+    projects to d_model=64, adds positional embeddings, runs 2-layer /
+    4-head self-attention to capture gene-gene CNV interactions, then
+    mean-pools → output projection → embed_dim.
+
+- `src/models/encoders/__init__.py` — exports all 10 encoder classes.
+- `src/models/__init__.py` — exports BaseModel.
+
+- `tests/test_encoders.py` — **77 new tests** covering:
+  - Every encoder: output shape with batch_size=1 (eval mode) and
+    batch_size=32 (train mode).
+  - Gradient flow: every trainable parameter receives gradients.
+  - `get_output_dim()` matches actual output for multiple embed_dim values.
+  - Variable input sizes (encoders handle different dims gracefully).
+  - VAE stochasticity (two forward passes produce different samples).
+  - Edge cases: non-divisible Transformer input, auto-inferred group sizes,
+    invalid group sizes raise ValueError.
+  - BaseModel helpers: `count_parameters()`, `get_device()`.
+
+**Commands run this session (and what they did):**
+```powershell
+# Ran all 77 encoder tests:
+python -m pytest tests/test_encoders.py -v   # → 77 passed in ~10 seconds
+```
+
+> ℹ️ **No new tools to install:** the encoders use only `torch` (PyTorch),
+> which was installed in Session 6.
+
+**Status:** ✅ Done and verified — all 77 tests pass; all 10 encoder variants
+produce correct output shapes, gradients flow through every parameter, and
+`get_output_dim()` is consistent with actual output.
+
+**What's next (Session 8):** Build `src/models/fusion/` — the five fusion
+strategies (early, late, attention, cross-attention, transformer) that combine
+the per-modality embeddings into a single representation for classification.
+
+---
+
 ### Session 6 — PyTorch data loading infrastructure — *2026-06-23*
 
 **Goal:** Bridge the gap between the numpy feature arrays (produced by
