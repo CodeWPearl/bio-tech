@@ -210,6 +210,158 @@ git commit -m "message"   # save a snapshot with a short description
 > what to do next. **Newest at the top.** This section is updated at the end of
 > every session.
 
+### Session 11 — Comprehensive evaluation pipeline — *2026-06-23*
+
+**Goal:** Build the full evaluation pipeline — comprehensive metrics with
+confidence intervals, baseline model comparisons, biological validation
+against COSMIC Cancer Gene Census, and the evaluation script that ties
+everything together for publication-ready results.
+
+**Plain-English background (what the new words mean):**
+- **Confusion matrix** — a table showing how many samples of each true class
+  were predicted as each class. The diagonal shows correct predictions; off-
+  diagonal cells show mistakes. Essential for understanding *which* classes
+  the model confuses.
+- **Precision, recall, F1** — precision = "of all samples I predicted as
+  class X, how many truly are X?" Recall = "of all true class X samples,
+  how many did I find?" F1 is their harmonic mean — one number that
+  balances both.
+- **Macro vs weighted average** — macro = compute per-class, then average
+  equally (every class matters the same). Weighted = average proportional
+  to class size (common classes dominate).
+- **Matthews Correlation Coefficient (MCC)** — a balanced measure using all
+  four quadrants of the confusion matrix. Ranges from -1 (total
+  disagreement) to +1 (perfect). Better than accuracy for imbalanced data.
+- **ROC-AUC** — Area Under the Receiver Operating Characteristic curve.
+  Measures how well the model separates classes across all probability
+  thresholds. 0.5 = random, 1.0 = perfect.
+- **PR-AUC** — Area Under the Precision-Recall curve. More informative than
+  ROC-AUC when classes are imbalanced (which ours are).
+- **Cohen's Kappa** — measures agreement between predicted and true labels,
+  corrected for chance agreement. 1.0 = perfect, 0 = no better than random.
+- **Top-k accuracy** — fraction of samples where the true label is among
+  the model's top-k most confident predictions. Top-2 lets the model "get
+  credit" for being uncertain between two similar classes (e.g. Pathogenic
+  vs Likely Pathogenic).
+- **Expected Calibration Error (ECE)** — measures how well the model's
+  stated confidence matches its actual accuracy. If the model says "90%
+  sure," it should be right ~90% of the time. Lower is better.
+- **Bootstrap confidence intervals** — resample the test set 1000 times
+  with replacement, compute each metric on each resample, and report the
+  2.5th and 97.5th percentiles as the 95% confidence interval. Shows how
+  reliable each metric is.
+- **Baseline models** — simpler ML models (Logistic Regression, Random
+  Forest, XGBoost, LightGBM, MLP) trained on the same data. If our deep
+  model can't beat these, it's not worth the complexity.
+- **COSMIC Cancer Gene Census** — a curated list of ~730 genes known to
+  drive cancer. We check: does our model correctly predict mutations in
+  these genes as pathogenic?
+- **Biological validation** — cross-referencing predictions with known
+  biology to ensure the model learns real biological signal, not just
+  statistical patterns.
+
+**What was created/changed:**
+- `src/evaluation/metrics.py`:
+  - **compute_all_metrics(y_true, y_pred, y_prob)** — computes 20+ metrics:
+    accuracy, per-class and macro/weighted precision/recall/F1, MCC,
+    ROC-AUC (OVR, macro), PR-AUC (OVR, macro), Cohen's kappa, top-1
+    and top-2 accuracy, and Expected Calibration Error (10 bins).
+  - **get_confusion_matrix()** — standard confusion matrix via sklearn.
+  - **classification_report_df()** — per-class report as a DataFrame.
+  - **compute_ci()** — bootstrap confidence intervals (n=1000 default,
+    95% CI) for all scalar metrics. Reproducible via seed.
+
+- `src/evaluation/benchmarks.py`:
+  - **run_baselines(X_train, y_train, X_test, y_test)** — trains and
+    evaluates 5 baseline models on flattened feature vectors:
+    (a) Logistic Regression, (b) Random Forest (500 trees),
+    (c) XGBoost, (d) LightGBM, (e) MLP (256→128→64).
+  - Each baseline: 5-fold CV on training set, full evaluation on test set,
+    all metrics from compute_all_metrics(). Returns a comparison DataFrame.
+  - Scales features with StandardScaler before training.
+  - Gracefully handles missing optional packages (XGBoost, LightGBM).
+
+- `src/evaluation/biological_validation.py`:
+  - **Built-in COSMIC Cancer Gene Census** — ~730 genes hardcoded (no
+    download needed); also supports loading from CSV.
+  - **validate_cancer_driver_predictions()** — for variants in known driver
+    genes: what fraction correctly predicted as Pathogenic/Likely Pathogenic?
+    For non-driver genes: what fraction correctly predicted as Benign/Likely
+    Benign? Reports accuracy and confidence per group.
+  - **validate_clinvar_confidence()** — maps ClinVar review status to star
+    counts (0–4), checks if model confidence correlates with star level.
+  - **gene_level_accuracy()** — per-gene accuracy DataFrame, sorted worst
+    to best, with minimum sample threshold.
+  - **cancer_driver_classification_report()** — binary precision/recall/F1
+    for pathogenic predictions in driver genes.
+  - **run_biological_validation()** — orchestrates all analyses above.
+
+- `scripts/evaluate.py` — **Full evaluation entry point** (replaced stub):
+  - Loads checkpoint + config, sets up DataModule, runs inference on test set.
+  - Computes all metrics + bootstrap CIs + baseline comparison + biological
+    validation.
+  - Saves results to `results/tables/` as JSON and CSV:
+    test_metrics.json, confidence_intervals.csv, confusion_matrix.csv,
+    classification_report.csv, baseline_comparison.csv,
+    biological_validation.json.
+  - Prints formatted summary with CIs to console.
+  - CLI flags: --skip-baselines, --skip-bootstrap, --n-bootstrap,
+    --cosmic-path, --output-dir.
+
+- `src/evaluation/__init__.py` — exports all public evaluation functions.
+
+- `tests/test_metrics.py` — **39 new tests** covering:
+  - compute_all_metrics: accuracy/F1/precision/recall/MCC/ROC-AUC/kappa
+    all verified against sklearn on known inputs, per-class keys present,
+    top-k keys present, ECE/PR-AUC present and bounded.
+  - Perfect predictions: accuracy=1.0, F1=1.0, MCC=1.0, kappa=1.0,
+    diagonal confusion matrix.
+  - Top-k accuracy: top-1 equals standard accuracy, top-2 >= top-1,
+    top-4 always 1.0 with 4 classes.
+  - ECE: perfect calibration low, non-negative, bounded [0,1].
+  - PR-AUC: positive for random, high for perfect.
+  - Confusion matrix: correct shape, sum=n, diagonal counts.
+  - Classification report: returns DataFrame, class names in index.
+  - Bootstrap CI: returns dict, tuples ordered, lower<=upper, point
+    estimate in range, reproducible with seed, key metrics present.
+
+- `tests/test_biological_validation.py` — **28 new tests** covering:
+  - COSMIC genes: >500 genes, known cancer genes present, frozenset type.
+  - Review star mapping: all star levels mapped correctly.
+  - Driver predictions: counts, accuracy, pathogenic recall, benign recall.
+  - ClinVar confidence: per-star breakdown, correlation, higher stars
+    correlate with higher confidence.
+  - Gene-level accuracy: returns DataFrame, perfect gene=1.0, min_samples
+    filter, sorted ascending.
+  - Driver classification report: P/R/F1 in range, NaN for no drivers.
+  - Full validation: expected sections present, ClinVar section conditional.
+
+**Commands run this session (and what they did):**
+```powershell
+# Installed evaluation dependencies:
+pip install scikit-learn xgboost lightgbm    # → installed
+
+# Ran all 67 new evaluation tests:
+python -m pytest tests/test_metrics.py tests/test_biological_validation.py -v
+# → 67 passed in ~31 seconds
+
+# Ran the full test suite (all modules):
+python -m pytest tests/ -v                   # → 404 passed in ~73 seconds
+```
+
+> ℹ️ **New dependencies installed:** `scikit-learn`, `xgboost`, `lightgbm`,
+> `scipy` — all already listed in `requirements.txt` from Session 1.
+
+**Status:** ✅ Done and verified — all 404 tests pass; the evaluation
+pipeline works end-to-end with comprehensive metrics, baseline comparisons,
+biological validation, and bootstrap confidence intervals.
+
+**What's next (Session 12):** Build `src/explainability/` — SHAP values,
+LIME explanations, and attention weight visualisation for interpreting the
+model's predictions, essential for clinical trust and journal publication.
+
+---
+
 ### Session 10 — Training infrastructure — *2026-06-23*
 
 **Goal:** Build the complete PyTorch Lightning training infrastructure —
