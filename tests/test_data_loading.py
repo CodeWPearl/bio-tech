@@ -669,3 +669,367 @@ def test_download_all_studies_writes_manifest(tmp_path: Path) -> None:
     assert on_disk["good_study"]["mutations"] == {"rows": 2, "cols": 1}
     assert "error" in on_disk["bad_study"]
     assert manifest == on_disk
+
+
+# =============================================================================
+# PyTorch Dataset & DataModule (src.data.dataset, src.data.datamodule)
+# =============================================================================
+#
+# All tests use synthetic numpy arrays — no real data downloads.
+
+import numpy as np
+import torch
+
+from src.data.dataset import MultiOmicsDataset, collate_fn
+from src.data.datamodule import PathogenicityDataModule
+
+
+# --- Fixtures for synthetic data ----------------------------------------------
+
+
+@pytest.fixture
+def synthetic_arrays() -> dict[str, np.ndarray]:
+    """Small synthetic arrays mimicking the feature pipeline output."""
+    rng = np.random.default_rng(42)
+    n = 20
+    return {
+        "mutation": rng.standard_normal((n, 10)).astype(np.float32),
+        "expression": rng.standard_normal((n, 8)).astype(np.float32),
+        "methylation": rng.standard_normal((n, 6)).astype(np.float32),
+        "cnv": rng.standard_normal((n, 4)).astype(np.float32),
+        "clinical": rng.standard_normal((n, 5)).astype(np.float32),
+        "labels": rng.integers(0, 4, size=n).astype(np.int64),
+        "modality_mask": np.ones((n, 3), dtype=bool),
+    }
+
+
+@pytest.fixture
+def dataset_all_present(synthetic_arrays: dict[str, np.ndarray]) -> MultiOmicsDataset:
+    """Dataset where all modalities are present for every sample."""
+    return MultiOmicsDataset(
+        mutation_features=synthetic_arrays["mutation"],
+        expression_features=synthetic_arrays["expression"],
+        methylation_features=synthetic_arrays["methylation"],
+        cnv_features=synthetic_arrays["cnv"],
+        clinical_features=synthetic_arrays["clinical"],
+        labels=synthetic_arrays["labels"],
+        modality_mask=synthetic_arrays["modality_mask"],
+    )
+
+
+# --- MultiOmicsDataset tests -------------------------------------------------
+
+
+def test_dataset_len(dataset_all_present: MultiOmicsDataset) -> None:
+    """__len__ returns the correct sample count."""
+    assert len(dataset_all_present) == 20
+
+
+def test_dataset_getitem_keys(dataset_all_present: MultiOmicsDataset) -> None:
+    """__getitem__ returns all expected keys."""
+    sample = dataset_all_present[0]
+    expected_keys = {
+        "mutation", "expression", "methylation", "cnv",
+        "clinical", "modality_mask", "label",
+    }
+    assert set(sample.keys()) == expected_keys
+
+
+def test_dataset_getitem_dtypes(dataset_all_present: MultiOmicsDataset) -> None:
+    """All returned tensors have the correct dtypes."""
+    sample = dataset_all_present[0]
+    assert sample["mutation"].dtype == torch.float32
+    assert sample["expression"].dtype == torch.float32
+    assert sample["methylation"].dtype == torch.float32
+    assert sample["cnv"].dtype == torch.float32
+    assert sample["clinical"].dtype == torch.float32
+    assert sample["modality_mask"].dtype == torch.bool
+    assert sample["label"].dtype == torch.int64
+
+
+def test_dataset_getitem_shapes(
+    dataset_all_present: MultiOmicsDataset,
+    synthetic_arrays: dict[str, np.ndarray],
+) -> None:
+    """Tensor shapes match the input array dimensions."""
+    sample = dataset_all_present[5]
+    assert sample["mutation"].shape == (10,)
+    assert sample["expression"].shape == (8,)
+    assert sample["methylation"].shape == (6,)
+    assert sample["cnv"].shape == (4,)
+    assert sample["clinical"].shape == (5,)
+    assert sample["modality_mask"].shape == (3,)
+    assert sample["label"].shape == ()
+
+
+# --- collate_fn tests ---------------------------------------------------------
+
+
+def test_collate_fn_batch_shapes(dataset_all_present: MultiOmicsDataset) -> None:
+    """collate_fn produces correctly shaped batch tensors."""
+    batch = [dataset_all_present[i] for i in range(4)]
+    collated = collate_fn(batch)
+
+    assert collated["mutation"].shape == (4, 10)
+    assert collated["expression"].shape == (4, 8)
+    assert collated["methylation"].shape == (4, 6)
+    assert collated["cnv"].shape == (4, 4)
+    assert collated["clinical"].shape == (4, 5)
+    assert collated["modality_mask"].shape == (4, 3)
+    assert collated["label"].shape == (4,)
+
+
+def test_collate_fn_preserves_values(dataset_all_present: MultiOmicsDataset) -> None:
+    """Collated values match the individual samples."""
+    batch = [dataset_all_present[0], dataset_all_present[1]]
+    collated = collate_fn(batch)
+    assert torch.equal(collated["mutation"][0], dataset_all_present[0]["mutation"])
+    assert torch.equal(collated["label"][1], dataset_all_present[1]["label"])
+
+
+# --- Modality masking tests ---------------------------------------------------
+
+
+def test_missing_modalities_zeros_and_mask() -> None:
+    """When a modality is missing, its tensor is zeros and mask is False."""
+    rng = np.random.default_rng(99)
+    n = 5
+    mask = np.array([
+        [True, False, True],
+        [False, True, False],
+        [True, True, True],
+        [False, False, False],
+        [True, False, False],
+    ], dtype=bool)
+
+    ds = MultiOmicsDataset(
+        mutation_features=rng.standard_normal((n, 4)).astype(np.float32),
+        expression_features=rng.standard_normal((n, 3)).astype(np.float32),
+        methylation_features=rng.standard_normal((n, 3)).astype(np.float32),
+        cnv_features=rng.standard_normal((n, 2)).astype(np.float32),
+        clinical_features=rng.standard_normal((n, 2)).astype(np.float32),
+        labels=np.zeros(n, dtype=np.int64),
+        modality_mask=mask,
+    )
+
+    # Sample 1: expression missing (mask[1][0] = False)
+    sample1 = ds[1]
+    assert sample1["modality_mask"][0].item() is False
+    assert torch.all(sample1["expression"] == 0.0)
+
+    # Sample 3: all missing
+    sample3 = ds[3]
+    assert not sample3["modality_mask"].any()
+    assert torch.all(sample3["expression"] == 0.0)
+    assert torch.all(sample3["methylation"] == 0.0)
+    assert torch.all(sample3["cnv"] == 0.0)
+
+    # Sample 2: all present — values are NOT zero (with overwhelming probability)
+    sample2 = ds[2]
+    assert sample2["modality_mask"].all()
+    assert not torch.all(sample2["expression"] == 0.0)
+
+
+def test_none_modalities_produce_zero_dim_tensors() -> None:
+    """Passing None for optional modalities gives zero-width tensors."""
+    rng = np.random.default_rng(7)
+    n = 3
+    mask = np.zeros((n, 3), dtype=bool)
+
+    ds = MultiOmicsDataset(
+        mutation_features=rng.standard_normal((n, 4)).astype(np.float32),
+        expression_features=None,
+        methylation_features=None,
+        cnv_features=None,
+        clinical_features=rng.standard_normal((n, 2)).astype(np.float32),
+        labels=np.zeros(n, dtype=np.int64),
+        modality_mask=mask,
+    )
+
+    sample = ds[0]
+    assert sample["expression"].shape == (0,)
+    assert sample["methylation"].shape == (0,)
+    assert sample["cnv"].shape == (0,)
+
+
+# --- DataModule tests (synthetic, no real data) -------------------------------
+
+
+def _make_synthetic_config(tmp_path: Path) -> "Config":
+    """Build a minimal Config for DataModule testing with tiny synthetic data."""
+    from src.utils.config import Config
+
+    return Config({
+        "data": {
+            "clinvar_url": "fake",
+            "cbioportal_url": "fake",
+            "studies": ["fake_study"],
+            "test_size": 0.2,
+            "val_size": 0.2,
+            "random_seed": 42,
+        },
+        "model": {
+            "mutation_embed_dim": 128,
+            "expression_embed_dim": 256,
+            "methylation_embed_dim": 128,
+            "cnv_embed_dim": 64,
+            "fusion_dim": 256,
+            "num_classes": 4,
+            "dropout": 0.3,
+            "fusion_type": "cross_attention",
+        },
+        "training": {
+            "max_epochs": 2,
+            "batch_size": 4,
+            "learning_rate": 0.001,
+            "weight_decay": 0.0001,
+            "patience": 5,
+            "focal_loss_gamma": 2.0,
+            "num_workers": 0,
+        },
+        "experiment": {"name": "test", "tracking_uri": "mlruns"},
+    })
+
+
+def _write_synthetic_cache(tmp_path: Path, n_train: int = 16, n_val: int = 4, n_test: int = 4) -> Path:
+    """Write a synthetic feature cache to tmp_path and return the cache path."""
+    import pickle
+
+    rng = np.random.default_rng(123)
+    cache: dict[str, dict[str, np.ndarray]] = {}
+    for split, n in [("train", n_train), ("val", n_val), ("test", n_test)]:
+        cache[split] = {
+            "mutation": rng.standard_normal((n, 10)).astype(np.float32),
+            "expression": rng.standard_normal((n, 8)).astype(np.float32),
+            "methylation": rng.standard_normal((n, 6)).astype(np.float32),
+            "cnv": rng.standard_normal((n, 4)).astype(np.float32),
+            "clinical": rng.standard_normal((n, 5)).astype(np.float32),
+            "labels": rng.integers(0, 4, size=n).astype(np.int64),
+            "modality_mask": np.ones((n, 3), dtype=bool),
+        }
+
+    processed_dir = tmp_path / "data" / "processed"
+    processed_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = processed_dir / "feature_cache.pkl"
+    with cache_path.open("wb") as fh:
+        pickle.dump(cache, fh)
+    return cache_path
+
+
+def test_datamodule_setup_creates_datasets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """DataModule.setup creates train/val/test datasets from cached features."""
+    monkeypatch.chdir(tmp_path)
+    _write_synthetic_cache(tmp_path)
+    config = _make_synthetic_config(tmp_path)
+
+    dm = PathogenicityDataModule(config)
+    dm.setup(stage=None)
+
+    assert dm.train_dataset is not None
+    assert dm.val_dataset is not None
+    assert dm.test_dataset is not None
+    assert len(dm.train_dataset) == 16
+    assert len(dm.val_dataset) == 4
+    assert len(dm.test_dataset) == 4
+
+
+def test_datamodule_train_dataloader(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """train_dataloader returns batches with the correct structure."""
+    monkeypatch.chdir(tmp_path)
+    _write_synthetic_cache(tmp_path)
+    config = _make_synthetic_config(tmp_path)
+
+    dm = PathogenicityDataModule(config)
+    dm.setup(stage="fit")
+
+    loader = dm.train_dataloader()
+    batch = next(iter(loader))
+
+    assert "mutation" in batch
+    assert "label" in batch
+    assert batch["mutation"].shape[0] <= config.training.batch_size
+    assert batch["label"].dtype == torch.int64
+
+
+def test_datamodule_val_dataloader(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """val_dataloader yields all validation samples."""
+    monkeypatch.chdir(tmp_path)
+    _write_synthetic_cache(tmp_path)
+    config = _make_synthetic_config(tmp_path)
+
+    dm = PathogenicityDataModule(config)
+    dm.setup(stage="fit")
+
+    loader = dm.val_dataloader()
+    total = sum(b["label"].shape[0] for b in loader)
+    assert total == 4
+
+
+def test_datamodule_test_dataloader(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """test_dataloader yields all test samples."""
+    monkeypatch.chdir(tmp_path)
+    _write_synthetic_cache(tmp_path)
+    config = _make_synthetic_config(tmp_path)
+
+    dm = PathogenicityDataModule(config)
+    dm.setup(stage="test")
+
+    loader = dm.test_dataloader()
+    total = sum(b["label"].shape[0] for b in loader)
+    assert total == 4
+
+
+# --- Class-weighted sampler tests ---------------------------------------------
+
+
+def test_weighted_sampler_balances_classes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The weighted sampler draws rare classes more frequently than uniform."""
+    monkeypatch.chdir(tmp_path)
+    import pickle
+
+    rng = np.random.default_rng(0)
+    n_train = 200
+    # Highly imbalanced: class 0 = 160, class 1 = 20, class 2 = 10, class 3 = 10
+    labels = np.array(
+        [0] * 160 + [1] * 20 + [2] * 10 + [3] * 10, dtype=np.int64
+    )
+    rng.shuffle(labels)
+
+    cache: dict[str, dict[str, np.ndarray]] = {}
+    for split, n, split_labels in [
+        ("train", n_train, labels),
+        ("val", 10, rng.integers(0, 4, size=10).astype(np.int64)),
+        ("test", 10, rng.integers(0, 4, size=10).astype(np.int64)),
+    ]:
+        cache[split] = {
+            "mutation": rng.standard_normal((n, 4)).astype(np.float32),
+            "expression": rng.standard_normal((n, 3)).astype(np.float32),
+            "methylation": rng.standard_normal((n, 3)).astype(np.float32),
+            "cnv": rng.standard_normal((n, 2)).astype(np.float32),
+            "clinical": rng.standard_normal((n, 2)).astype(np.float32),
+            "labels": split_labels,
+            "modality_mask": np.ones((n, 3), dtype=bool),
+        }
+
+    processed_dir = tmp_path / "data" / "processed"
+    processed_dir.mkdir(parents=True, exist_ok=True)
+    with (processed_dir / "feature_cache.pkl").open("wb") as fh:
+        pickle.dump(cache, fh)
+
+    config = _make_synthetic_config(tmp_path)
+    dm = PathogenicityDataModule(config)
+    dm.setup(stage="fit")
+
+    loader = dm.train_dataloader()
+    all_labels: list[int] = []
+    for batch in loader:
+        all_labels.extend(batch["label"].tolist())
+
+    counts = np.bincount(all_labels, minlength=4)
+    # With balanced sampling, the rarest class (10 of 200 = 5%) should appear
+    # much more often than 5%. Check it's at least 10% of total drawn samples.
+    min_class_ratio = counts.min() / counts.sum()
+    assert min_class_ratio > 0.10, (
+        f"Rarest class ratio {min_class_ratio:.3f} is too low — "
+        f"sampler may not be balancing. counts={counts}"
+    )

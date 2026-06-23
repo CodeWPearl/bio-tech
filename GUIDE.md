@@ -210,6 +210,91 @@ git commit -m "message"   # save a snapshot with a short description
 > what to do next. **Newest at the top.** This section is updated at the end of
 > every session.
 
+### Session 6 — PyTorch data loading infrastructure — *2026-06-23*
+
+**Goal:** Bridge the gap between the numpy feature arrays (produced by
+Session 5's extractors) and the PyTorch training loop.  Build a proper
+`Dataset` and `LightningDataModule` so the model can consume batches of
+multi-omics data with correct handling of missing modalities.
+
+**Plain-English background (what the new words mean):**
+- **Dataset** — a PyTorch object that holds all the data samples and knows
+  how to return one sample at a time (by index).  Think of it as a
+  bookshelf where each slot holds one patient's complete data.
+- **DataLoader** — wraps the Dataset and serves up *batches* (groups of
+  samples) during training.  It handles shuffling, parallelism, and
+  memory pinning automatically.
+- **LightningDataModule** — a PyTorch Lightning wrapper that organises the
+  full data lifecycle (download → process → split → serve) into one tidy
+  class that the training loop can call.
+- **Modality mask** — a per-sample boolean vector saying which optional
+  modalities (expression, methylation, CNV) are actually available.
+  Missing modalities are zero-filled and the mask tells the model to
+  ignore them rather than treating zeros as real data.
+- **Class-weighted sampler** — addresses the class imbalance problem
+  (Session 2 showed Likely Benign vastly outnumbers Pathogenic) by
+  drawing rare classes more frequently during training.  Each sample's
+  probability of being picked is inversely proportional to its class
+  frequency.
+- **collate_fn** — a custom function that tells the DataLoader how to
+  stack individual sample dicts into one batched dict of tensors.
+- **Feature cache** — the DataModule saves the extracted features to a
+  pickle file after the first run, so subsequent calls skip the expensive
+  extraction pipeline and load instantly.
+
+**What was created/changed:**
+- `src/data/dataset.py` — **MultiOmicsDataset(torch.utils.data.Dataset)**:
+  - Takes per-modality numpy arrays (mutation, expression, methylation,
+    CNV, clinical) plus labels and a modality mask.
+  - `__getitem__` returns a dict of 7 tensors; missing modalities are
+    zero-filled based on the mask.
+  - `__len__` returns sample count.
+  - `collate_fn()` — stacks a list of sample dicts into a batched dict.
+
+- `src/data/datamodule.py` — **PathogenicityDataModule(LightningDataModule)**:
+  - Fully config-driven (batch size, num workers, split sizes, studies —
+    all from `configs/default.yaml`).
+  - `prepare_data()` — triggers download pipeline if raw data is missing.
+  - `setup(stage)` — loads cached features or runs the full merge →
+    feature extraction pipeline, then creates Dataset objects.
+  - `train_dataloader()` — DataLoader with class-weighted random sampler
+    using inverse class frequency weights.
+  - `val_dataloader()` / `test_dataloader()` — DataLoaders without
+    shuffling.
+  - Caches processed features to `data/processed/feature_cache.pkl`.
+  - Logs comprehensive dataset statistics (sample counts, label
+    distributions, modality availability) on setup.
+
+- `tests/test_data_loading.py` — **13 new tests** (now 50 total in this
+  file, 130 total across all files) with synthetic data:
+  - Dataset `__getitem__`: keys, dtypes, shapes.
+  - `collate_fn`: correct batch shapes, value preservation.
+  - Modality masking: missing → zeros + mask=False, None → zero-width.
+  - DataModule: setup creates datasets, train/val/test dataloaders work.
+  - Weighted sampler: rarest class drawn at >10% despite being 5% of data.
+
+**Commands run this session (and what they did):**
+```powershell
+# Installed PyTorch and PyTorch Lightning (first time):
+pip install torch pytorch-lightning                     # → installed
+
+# Ran the automated tests for the new data loading (and all earlier ones):
+python -m pytest tests/ -v                              # → 130 passed
+```
+
+> ℹ️ **New dependencies:** `torch` and `pytorch-lightning` were installed
+> this session (they were already in `requirements.txt` from Session 1).
+
+**Status:** ✅ Done and verified — all 130 tests pass; Dataset and
+DataModule work end-to-end with synthetic data; class-weighted sampler
+produces balanced batches.
+
+**What's next (Session 7):** Build `src/models/encoders/` — the per-modality
+neural network encoders that compress each feature vector into a learned
+embedding, and the fusion module that combines them for the final prediction.
+
+---
+
 ### Session 5 — Feature extraction modules — *2026-06-23*
 
 **Goal:** Turn each modality's raw numbers (mutation calls, gene expression,
