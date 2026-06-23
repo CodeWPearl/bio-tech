@@ -210,6 +210,96 @@ git commit -m "message"   # save a snapshot with a short description
 > what to do next. **Newest at the top.** This section is updated at the end of
 > every session.
 
+### Session 9 — Assembled model + classification head — *2026-06-23*
+
+**Goal:** Wire together all the per-modality encoders (Session 7) and fusion
+modules (Session 8) into a single end-to-end **PathogenicityPredictor** model
+with a classification head, then verify it works with all five fusion types.
+
+**Plain-English background (what the new words mean):**
+- **Classification head** — the final piece of the neural network that takes
+  the fused multi-omics representation and produces a prediction. It's a
+  three-layer MLP (128 → 64 → 4 neurons) that outputs one score per class.
+  The highest score is the prediction.
+- **Logits** — the raw scores the network outputs before they're converted to
+  probabilities. They can be any number (positive or negative). Softmax
+  converts them to probabilities that sum to 1.
+- **PathogenicityPredictor** — the full assembled model. It takes a batch of
+  patient data (mutation features, expression, methylation, CNV, clinical),
+  runs each through its encoder, fuses them, and classifies. One forward
+  pass goes: raw features → modality embeddings → fused embedding → logits
+  → probabilities → predicted class.
+- **from_config()** — a class method that creates the model from the YAML
+  config file. This is the intended way to instantiate the model for
+  training and inference.
+- **Model summary** — a report showing how many learnable parameters are in
+  each component (encoders, fusion, classifier). Useful for understanding
+  model complexity and checking nothing is unreasonably large.
+
+**What was created/changed:**
+- `src/models/classifier.py` — **ClassificationHead(nn.Module)**:
+  Linear(fusion_dim→128) → BatchNorm → ReLU → Dropout(0.3) →
+  Linear(128→64) → BatchNorm → ReLU → Dropout(0.2) → Linear(64→num_classes).
+  Methods: `forward()` returns logits, `predict_proba()` returns softmax
+  probabilities, `predict()` returns argmax class indices.
+
+- `src/models/full_model.py` — **PathogenicityPredictor(BaseModel)**:
+  - Instantiates 5 encoders (MutationEncoder, DenseAutoencoder,
+    MethylationDenseAutoencoder, CNVFCEncoder, clinical MLP) from config.
+  - Instantiates the chosen fusion module based on `config.model.fusion_type`.
+  - Instantiates ClassificationHead (for all fusions except late, which
+    produces logits directly inside the fusion module).
+  - `forward(batch)` returns a dict with: `logits`, `probabilities`,
+    `predicted_class`, `fused_embedding`, `modality_embeddings`, and
+    `attention_weights` (for interpretability).
+  - `from_config(config)` classmethod for clean instantiation.
+  - `summary()` prints parameter counts per component.
+
+- `src/models/__init__.py` — now exports ClassificationHead and
+  PathogenicityPredictor alongside BaseModel.
+
+- `configs/default.yaml` — added per-modality `*_input_dim` keys
+  (mutation: 42, expression: 2000, methylation: 2000, cnv: 200,
+  clinical: 32) and `clinical_embed_dim: 32`.
+
+- `tests/test_models.py` — **59 new tests** (now 301 total) covering:
+  - ClassificationHead: output shape, predict_proba sums to 1, predict
+    returns valid classes, gradient flow, different dims/num_classes.
+  - Full model forward: all output keys present, correct shapes for
+    logits/probabilities/predicted_class/fused_embedding/modality_embeddings.
+  - Full model backward: gradients flow to all classification-path
+    parameters, loss is scalar. Parametrised over all 5 fusion types.
+  - All 5 fusion types: forward pass + fused embedding shape works for
+    each. Attention fusion has weights; others don't.
+  - Missing modalities: 2 absent, only mutation present, parametrised over
+    all 5 fusions, backward with missing modalities.
+  - Parameter count: positive, not exploding (<5M), per fusion type.
+  - Utility methods: from_config for all 5 fusions, summary content,
+    get_output_dim, encode raises NotImplementedError, get_device.
+
+**Commands run this session (and what they did):**
+```powershell
+# Ran all 59 new model tests:
+python -m pytest tests/test_models.py -v   # → 59 passed in ~9 seconds
+
+# Ran the full test suite (all modules):
+python -m pytest tests/ -v                 # → 301 passed in ~36 seconds
+```
+
+> ℹ️ **No new tools to install:** the assembled model uses only modules
+> built in Sessions 7 and 8 plus `torch` (already installed).
+
+**Status:** ✅ Done and verified — all 301 tests pass; the full model works
+end-to-end with all 5 fusion types, handles missing modalities, gradients
+flow through every classification-path parameter, and parameter counts are
+reasonable.
+
+**What's next (Session 10):** Build the PyTorch Lightning training module
+with focal loss, evaluation metrics (accuracy, F1, AUROC), and the training
+script that ties everything together for experiment runs.
+
+---
+
 ### Session 8 — Multi-omics fusion strategies — *2026-06-23*
 
 **Goal:** Build the five fusion modules that combine the per-modality

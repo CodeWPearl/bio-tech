@@ -12,10 +12,16 @@ data:
   random_seed: 42
 
 model:
+  mutation_input_dim: 42
   mutation_embed_dim: 128
+  expression_input_dim: 2000
   expression_embed_dim: 256
+  methylation_input_dim: 2000
   methylation_embed_dim: 128
+  cnv_input_dim: 200
   cnv_embed_dim: 64
+  clinical_input_dim: 32
+  clinical_embed_dim: 32
   fusion_dim: 256
   num_classes: 4
   dropout: 0.3
