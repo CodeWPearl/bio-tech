@@ -210,6 +210,137 @@ git commit -m "message"   # save a snapshot with a short description
 > what to do next. **Newest at the top.** This section is updated at the end of
 > every session.
 
+### Session 12 — Explainability modules — *2026-06-24*
+
+**Goal:** Build the full explainability suite — SHAP values, Integrated
+Gradients, LIME explanations, and attention weight visualisation — so the
+model's predictions can be interpreted at both global (which modalities
+matter most?) and local (why this specific variant?) levels. Essential for
+clinical trust and journal publication.
+
+**Plain-English background (what the new words mean):**
+- **SHAP (SHapley Additive exPlanations)** — a method from game theory that
+  assigns each input feature a "credit score" for how much it pushed the
+  prediction toward a particular class. Positive SHAP = pushes toward;
+  negative = pushes away. Global importance averages these across many
+  samples. Modality importance sums feature credits within each data type.
+- **KernelExplainer** — a model-agnostic SHAP method that works by
+  repeatedly masking different subsets of features and measuring how the
+  prediction changes. Slower than gradient-based methods but works on any
+  model.
+- **Integrated Gradients (IG)** — a gradient-based attribution method that
+  accumulates the model's gradient as the input is smoothly interpolated
+  from a blank baseline (all zeros) to the actual input. The integral of
+  the gradient gives each feature's attribution. Fast and mathematically
+  principled.
+- **Captum** — Facebook's PyTorch library for model interpretability. We
+  use its `IntegratedGradients` implementation.
+- **Attention weights** — in attention-based fusion, the model learns how
+  much each modality should "look at" the others. These weights form a
+  matrix showing which modalities the model considers most important. Can
+  be extracted and plotted as a heatmap.
+- **LIME (Local Interpretable Model-agnostic Explanations)** — explains
+  individual predictions by fitting a simple, interpretable model (linear
+  regression) around a specific input point. It perturbs the input many
+  times, sees how predictions change, and identifies which features matter
+  most locally.
+- **Global vs. local explanation** — global = "across the whole test set,
+  which features/modalities matter most?" Local = "for this specific
+  patient's variant, why did the model predict Pathogenic?"
+
+**What was created/changed:**
+- `src/explainability/shap_explainer.py` — **SHAPExplainer**:
+  - Wraps the multi-omics model for SHAP's KernelExplainer (flattens the
+    per-modality batch dict into a single feature vector and back).
+  - `compute_global_importance(test_data, n_samples)` — computes SHAP
+    values for a sample of test instances, aggregates per-feature and
+    per-modality importance. Handles SHAP 0.52's 3-D array output format
+    `(n_samples, n_features, n_classes)`.
+  - `compute_local_explanation(single_sample)` — SHAP values for one
+    specific variant, returning per-feature attributions per class.
+  - `generate_shap_plots(shap_values, feature_names, output_dir)` — saves
+    three publication-ready plots: beeswarm summary, top-30 bar chart,
+    and modality importance bar chart.
+
+- `src/explainability/integrated_gradients.py` — **IGExplainer**:
+  - Uses `captum.attr.IntegratedGradients` via a flat-tensor wrapper that
+    converts the model's multi-input interface to single-tensor.
+  - `compute_attributions(batch, target_class)` — IG attributions for a
+    batch, split by modality, with per-modality scalar importance.
+  - `compute_modality_importance(test_loader)` — averages IG attributions
+    across the test set, returns modalities ranked by importance.
+
+- `src/explainability/attention_viz.py` — **AttentionVisualizer**:
+  - Extracts attention weights from the attention fusion module's
+    `attention_weights` attribute (saved during forward pass).
+  - `extract_attention_weights(batch)` — single-batch extraction.
+  - `collect_attention_weights(test_loader)` — stacks weights across
+    multiple batches for statistical analysis.
+  - `plot_attention_heatmap(weights, output_path)` — seaborn heatmap of
+    average modality-to-modality attention.
+  - `plot_attention_distribution(weights, output_path)` — box plot of
+    per-modality attention weight distributions across test samples.
+  - `get_attention_summary(weights)` — per-modality mean/std/min/max
+    statistics.
+
+- `src/explainability/lime_explainer.py` — **LIMEExplainer**:
+  - Wraps the model as a flat predict function for `LimeTabularExplainer`.
+  - `explain_instance(sample, feature_names)` — returns top contributing
+    features for/against each class for a single prediction, plus the
+    LIME Explanation object for further analysis.
+
+- `scripts/generate_figures.py` — **Figure generation stub**:
+  - CLI entry point with flags: `--checkpoint`, `--config`, `--output-dir`,
+    `--n-shap-samples`, `--skip-shap`, `--skip-lime`, `--skip-ig`.
+  - Structure and interface are final; body has TODO comments to be fleshed
+    out once the full training pipeline is operational with real data.
+
+- `src/explainability/__init__.py` — exports all four explainer classes.
+
+- `tests/test_explainability.py` — **28 new tests** (now 432 total) covering:
+  - SHAP: init, modality slices cover full dim, batch flattening, default
+    and custom feature names, global importance runs and returns correct
+    keys/sizes, local explanation runs, plot generation saves 3 PNG files.
+  - IG: init, attribution shape matches (batch, total_features), per-
+    modality shapes correct, modality importance keys present and non-
+    negative, attributions are finite (no NaN/Inf), works for all target
+    classes, modality importance from DataLoader is ranked descending.
+  - Attention viz: extracts weights from attention fusion (shape
+    batch×5×5), returns None for early fusion, weights are non-negative
+    and rows sum to ~1, collection stacks across batches, heatmap and
+    distribution plots saved to disk, summary has correct structure.
+  - LIME: init, internal predict_fn returns valid probabilities summing
+    to 1, explain_instance runs and returns predicted class in range,
+    top features returned per class with (name, weight) tuples, works
+    with custom feature names and with explicit training data.
+
+**Commands run this session (and what they did):**
+```powershell
+# Installed explainability dependencies:
+pip install shap lime captum seaborn   # → installed
+
+# Ran all 28 new explainability tests:
+python -m pytest tests/test_explainability.py -v   # → 28 passed in ~52s
+
+# Ran the full test suite (all modules):
+python -m pytest tests/ -v                         # → 432 passed in ~95s
+```
+
+> ℹ️ **New dependencies installed:** `shap`, `lime`, `captum`, `seaborn` —
+> all already listed in `requirements.txt` from Session 1 (`shap`, `lime`,
+> `captum` for explainability; `seaborn` for plotting).
+
+**Status:** ✅ Done and verified — all 432 tests pass; all four
+explainability methods work end-to-end on tiny synthetic models, plots are
+generated correctly, and the SHAP normalizer handles both legacy list-based
+and newer 3-D array output formats.
+
+**What's next (Session 13):** Build `scripts/generate_figures.py` (flesh
+out the stub) and `scripts/run_explainability.py` for end-to-end
+explainability analysis on real trained models with actual data.
+
+---
+
 ### Session 11 — Comprehensive evaluation pipeline — *2026-06-23*
 
 **Goal:** Build the full evaluation pipeline — comprehensive metrics with
