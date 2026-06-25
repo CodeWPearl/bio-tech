@@ -14,6 +14,7 @@ from torch import nn
 
 from src.models.base import BaseModel
 from src.models.classifier import ClassificationHead
+from src.models.encoders.clinical_encoder import ClinicalEncoder
 from src.models.encoders.cnv_encoder import CNVFCEncoder
 from src.models.encoders.expression_encoder import DenseAutoencoder
 from src.models.encoders.methylation_encoder import MethylationDenseAutoencoder
@@ -89,11 +90,10 @@ class PathogenicityPredictor(BaseModel):
 
         clinical_input: int = model_cfg.get("clinical_input_dim", 32)
         clinical_embed: int = model_cfg.get("clinical_embed_dim", 32)
-        self.encoders["clinical"] = nn.Sequential(
-            nn.Linear(clinical_input, clinical_embed),
-            nn.BatchNorm1d(clinical_embed),
-            nn.ReLU(),
-            nn.Dropout(dropout),
+        self.encoders["clinical"] = ClinicalEncoder(
+            input_dim=clinical_input,
+            embed_dim=clinical_embed,
+            dropout=dropout,
         )
         self._modality_dims["clinical"] = clinical_embed
 

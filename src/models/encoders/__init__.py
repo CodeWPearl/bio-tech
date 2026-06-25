@@ -1,5 +1,6 @@
 """Modality-specific encoders for the pathogenicity prediction framework."""
 
+from src.models.encoders.clinical_encoder import ClinicalEncoder
 from src.models.encoders.cnv_encoder import CNVAttentionEncoder, CNVFCEncoder
 from src.models.encoders.expression_encoder import (
     DenseAutoencoder,
@@ -17,6 +18,7 @@ from src.models.encoders.mutation_encoder import (
 )
 
 __all__ = [
+    "ClinicalEncoder",
     "CNVAttentionEncoder",
     "CNVFCEncoder",
     "DenseAutoencoder",

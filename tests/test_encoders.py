@@ -25,6 +25,7 @@ from src.models.encoders.methylation_encoder import (
     MethylationVAE,
 )
 from src.models.encoders.cnv_encoder import CNVAttentionEncoder, CNVFCEncoder
+from src.models.encoders.clinical_encoder import ClinicalEncoder
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -34,6 +35,7 @@ MUTATION_DIM = 42
 EXPRESSION_DIM = 2000
 METHYLATION_DIM = 2000
 CNV_DIM = 200
+CLINICAL_DIM = 32
 
 
 @pytest.fixture()
@@ -74,6 +76,16 @@ def cnv_batch_1() -> torch.Tensor:
 @pytest.fixture()
 def cnv_batch_32() -> torch.Tensor:
     return torch.randn(32, CNV_DIM)
+
+
+@pytest.fixture()
+def clinical_batch_1() -> torch.Tensor:
+    return torch.randn(1, CLINICAL_DIM)
+
+
+@pytest.fixture()
+def clinical_batch_32() -> torch.Tensor:
+    return torch.randn(32, CLINICAL_DIM)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -539,6 +551,61 @@ class TestCNVAttentionEncoder:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Clinical Encoder
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestClinicalEncoder:
+    """Tests for the MLP-based ClinicalEncoder."""
+
+    def test_output_shape_batch_1(self, clinical_batch_1: torch.Tensor) -> None:
+        enc = ClinicalEncoder(CLINICAL_DIM, embed_dim=32)
+        enc.eval()
+        out = enc(clinical_batch_1)
+        assert out.shape == (1, 32)
+
+    def test_output_shape_batch_32(self, clinical_batch_32: torch.Tensor) -> None:
+        enc = ClinicalEncoder(CLINICAL_DIM, embed_dim=32)
+        out = enc(clinical_batch_32)
+        assert out.shape == (32, 32)
+
+    def test_get_output_dim(self) -> None:
+        enc = ClinicalEncoder(CLINICAL_DIM, embed_dim=16)
+        assert enc.get_output_dim() == 16
+
+    def test_gradient_flow(self, clinical_batch_32: torch.Tensor) -> None:
+        enc = ClinicalEncoder(CLINICAL_DIM, embed_dim=32)
+        out = enc(clinical_batch_32)
+        loss = out.sum()
+        loss.backward()
+        for name, p in enc.named_parameters():
+            if p.requires_grad:
+                assert p.grad is not None, f"No gradient for {name}"
+
+    def test_custom_embed_dim(self, clinical_batch_32: torch.Tensor) -> None:
+        enc = ClinicalEncoder(CLINICAL_DIM, embed_dim=64)
+        out = enc(clinical_batch_32)
+        assert out.shape == (32, 64)
+        assert enc.get_output_dim() == 64
+
+    def test_variable_input_size(self) -> None:
+        for dim in [8, 16, 32, 64]:
+            enc = ClinicalEncoder(dim, embed_dim=32)
+            x = torch.randn(4, dim)
+            out = enc(x)
+            assert out.shape == (4, 32)
+
+    def test_default_embed_dim(self) -> None:
+        enc = ClinicalEncoder(CLINICAL_DIM)
+        assert enc.get_output_dim() == 32
+
+    def test_count_parameters_small(self) -> None:
+        enc = ClinicalEncoder(CLINICAL_DIM, embed_dim=32)
+        params = enc.count_parameters()
+        assert params < 10_000, "Clinical encoder should be compact"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Cross-encoder consistency: get_output_dim matches actual output
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -604,4 +671,10 @@ class TestOutputDimConsistency:
     def test_cnv_attention(self, embed_dim: int) -> None:
         enc = CNVAttentionEncoder(CNV_DIM, embed_dim=embed_dim)
         out = enc(torch.randn(2, CNV_DIM))
+        assert out.shape[1] == enc.get_output_dim()
+
+    @pytest.mark.parametrize("embed_dim", [16, 32, 64])
+    def test_clinical_encoder(self, embed_dim: int) -> None:
+        enc = ClinicalEncoder(CLINICAL_DIM, embed_dim=embed_dim)
+        out = enc(torch.randn(2, CLINICAL_DIM))
         assert out.shape[1] == enc.get_output_dim()

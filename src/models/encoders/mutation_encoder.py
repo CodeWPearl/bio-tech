@@ -49,10 +49,13 @@ class MutationEncoder(BaseModel):
             nn.BatchNorm1d(256),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(256, embed_dim),
-            nn.BatchNorm1d(embed_dim),
+            nn.Linear(256, 128),
+            nn.BatchNorm1d(128),
             nn.ReLU(),
             nn.Dropout(max(dropout - 0.1, 0.0)),
+            nn.Linear(128, embed_dim),
+            nn.BatchNorm1d(embed_dim),
+            nn.ReLU(),
         )
 
     def get_output_dim(self) -> int:
