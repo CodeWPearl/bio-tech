@@ -210,6 +210,145 @@ git commit -m "message"   # save a snapshot with a short description
 > what to do next. **Newest at the top.** This section is updated at the end of
 > every session.
 
+### Session 13 — Uncertainty estimation — *2026-06-25*
+
+**Goal:** Build the full uncertainty estimation suite — MC Dropout, deep
+ensembles, probability calibration via temperature scaling, Expected
+Calibration Error, and reliability diagrams — so the model can quantify
+*how sure* it is about each prediction and flag low-confidence cases for
+manual review.
+
+**Plain-English background (what the new words mean):**
+- **Uncertainty estimation** — instead of just saying "Pathogenic," the model
+  also says "…and I'm 87% sure, with low uncertainty." This is critical for
+  clinical applications where a wrong prediction could be dangerous.
+- **Epistemic uncertainty** — uncertainty due to the model's *ignorance* (not
+  enough training data in this region). Reducible with more data. Estimated
+  by measuring how much the model's predictions vary across multiple runs.
+- **MC Dropout (Monte Carlo Dropout)** — a technique that keeps dropout layers
+  active at inference time and runs the model many times (e.g. 50 passes).
+  Each pass gives a slightly different prediction because different neurons
+  are randomly masked. The *variance* across passes measures epistemic
+  uncertainty. High variance = the model is unsure.
+- **Deep ensembles** — train N models (e.g. 5) with different random seeds.
+  Each model learns slightly different patterns. Disagreement between members
+  indicates uncertainty. More expensive than MC Dropout but often more
+  reliable.
+- **Mutual information** — for ensembles, measures how much the individual
+  models disagree beyond what's expected from the data. High mutual
+  information = the models are confused for different reasons.
+- **Predictive entropy** — entropy of the mean prediction across MC passes
+  or ensemble members. Higher entropy = more spread-out probabilities =
+  less confident.
+- **Temperature scaling** — a post-hoc calibration technique. The model's
+  raw logits are divided by a learned temperature T before softmax. T > 1
+  softens probabilities (less overconfident), T < 1 sharpens them. T is
+  optimised on the validation set by minimising negative log-likelihood.
+- **Expected Calibration Error (ECE)** — measures how well stated confidence
+  matches actual accuracy. Predictions are binned by confidence (e.g. 15
+  bins); for each bin, ECE measures |avg confidence - avg accuracy|, weighted
+  by bin size. Lower is better. Perfect calibration = ECE of 0.
+- **Reliability diagram** — a plot of true accuracy vs. predicted confidence
+  across bins. A perfectly calibrated model follows the diagonal. Points
+  below the diagonal = overconfident; above = underconfident.
+- **CalibratedModelWrapper** — wraps the original model with a fitted
+  temperature scaler so all predictions automatically come out calibrated.
+
+**What was created/changed:**
+- `src/uncertainty/mc_dropout.py` — **MCDropoutPredictor**:
+  - Takes a trained model and number of forward passes (default 50).
+  - `predict_with_uncertainty(batch)` — enables dropout at inference,
+    runs N stochastic forward passes, collects all softmax outputs.
+  - Returns: `mean_probs` (averaged predictions), `predicted_class`,
+    `epistemic_uncertainty` (variance of predictions, averaged over classes),
+    `predictive_entropy` (entropy of mean prediction), and
+    `all_predictions` (N×batch×classes tensor for further analysis).
+  - Restores model to eval mode after prediction.
+
+- `src/uncertainty/deep_ensembles.py` — **DeepEnsemblePredictor**:
+  - Loads N independently trained model checkpoints (default 5).
+  - `predict_with_uncertainty(batch)` — forward pass through each member,
+    computes mean prediction, variance, entropy, and mutual information.
+  - Returns same format as MC Dropout plus `mutual_information`.
+
+- `src/uncertainty/calibration.py`:
+  - **TemperatureScaling(nn.Module)** — learnable scalar temperature parameter.
+    `forward(logits)` returns softmax(logits / T). `optimize_temperature()`
+    fits T by minimising NLL on validation logits using L-BFGS optimiser.
+  - **compute_ece(y_true, y_prob, n_bins=15)** — Expected Calibration Error
+    with configurable number of equal-width bins. Returns float in [0, 1].
+  - **compute_reliability_diagram(y_true, y_prob, n_bins=15)** — returns
+    (mean_predicted_prob, true_fraction, bin_counts) arrays for plotting.
+  - **CalibratedModelWrapper(nn.Module)** — wraps a model with a fitted
+    temperature scaler; `forward()` replaces raw probabilities with
+    calibrated ones while keeping logits unchanged.
+  - **apply_calibration(model, val_loader)** — collects logits from
+    validation set, fits temperature, returns a CalibratedModelWrapper.
+
+- `src/uncertainty/__init__.py` — exports all uncertainty classes and functions.
+
+- `scripts/evaluate.py` — **Updated** with uncertainty estimation:
+  - New CLI flags: `--skip-uncertainty`, `--mc-passes` (default 50),
+    `--uncertainty-threshold` (default 0.1).
+  - Runs MC Dropout uncertainty estimation on the test set.
+  - Fits temperature scaling on validation set, computes ECE before and
+    after calibration.
+  - Reports per-class uncertainty statistics (mean, std of epistemic
+    uncertainty and predictive entropy).
+  - Flags high-uncertainty predictions (above threshold) for manual review.
+  - Saves `uncertainty_results.json` and
+    `uncertainty_augmented_predictions.csv` to `results/tables/`.
+
+- `scripts/inference.py` — **Fully implemented** (replaced scaffold stub):
+  - Loads model checkpoint, reads input TSV/CSV file.
+  - For each variant: builds a batch from input features, runs MC Dropout
+    uncertainty estimation, optionally applies temperature calibration.
+  - Output per variant: `predicted_class`, `confidence`, `uncertainty`,
+    `calibrated_probability` (all 4 classes), `explanation` (top
+    contributing modalities), and `recommendation` ("High confidence
+    prediction" / "Moderate confidence — consider expert review" /
+    "Low confidence — manual review recommended").
+  - Saves results as JSON (to file or stdout).
+  - CLI flags: `--checkpoint`, `--input`, `--config`, `--output`,
+    `--mc-passes`, `--temperature`, `--batch-size`.
+
+- `tests/test_uncertainty.py` — **29 new tests** (now 461 total) covering:
+  - MC Dropout: output keys, shapes for mean_probs/predicted_class/
+    epistemic_uncertainty/predictive_entropy/all_predictions, probs sum
+    to 1, uncertainty non-negative, entropy non-negative, model returns
+    to eval mode, single-sample batch, different n_passes values.
+  - Temperature Scaling: output shape, probs sum to 1, T=1 matches
+    softmax, higher T flattens distribution, optimize returns positive T,
+    optimization changes initial value.
+  - ECE: perfect calibration has low ECE, ECE is non-negative, ECE
+    bounded by 1, works with different n_bins.
+  - Reliability diagram: output shapes, bin counts sum correctly, true
+    fraction in [0, 1] range.
+  - CalibratedModelWrapper: output keys preserved, calibrated probs sum
+    to 1, calibrated probs differ from raw, logits unchanged by wrapper.
+
+**Commands run this session (and what they did):**
+```powershell
+# Ran all 29 new uncertainty tests:
+python -m pytest tests/test_uncertainty.py -v   # → 29 passed in ~67s
+
+# Ran the full test suite (all modules):
+python -m pytest tests/ -v                      # → 461 passed in ~272s
+```
+
+> ℹ️ **No new tools to install:** the uncertainty modules use only `torch`,
+> `numpy`, and `scipy` (for L-BFGS optimiser) — all already installed.
+
+**Status:** ✅ Done and verified — all 461 tests pass; MC Dropout produces
+valid uncertainty estimates, temperature scaling calibrates probabilities,
+ECE computation is correct, and the inference pipeline outputs full
+predictions with confidence, uncertainty, and review recommendations.
+
+**What's next (Session 14):** Build the ablation study framework with
+configs for each ablation variant and an automated comparison script.
+
+---
+
 ### Session 12 — Explainability modules — *2026-06-24*
 
 **Goal:** Build the full explainability suite — SHAP values, Integrated

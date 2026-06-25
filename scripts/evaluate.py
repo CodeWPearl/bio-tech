@@ -34,6 +34,13 @@ from src.evaluation.metrics import (
 )
 from src.models.full_model import PathogenicityPredictor
 from src.training.lightning_module import PathogenicityLightningModule
+from src.uncertainty.calibration import (
+    TemperatureScaling,
+    apply_calibration,
+    compute_ece,
+    compute_reliability_diagram,
+)
+from src.uncertainty.mc_dropout import MCDropoutPredictor
 from src.utils.config import load_config
 from src.utils.logging_setup import setup_logging
 
@@ -93,6 +100,23 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Path to COSMIC Cancer Gene Census CSV (optional).",
     )
+    parser.add_argument(
+        "--skip-uncertainty",
+        action="store_true",
+        help="Skip MC Dropout uncertainty estimation (faster).",
+    )
+    parser.add_argument(
+        "--mc-passes",
+        type=int,
+        default=50,
+        help="Number of MC Dropout forward passes.",
+    )
+    parser.add_argument(
+        "--uncertainty-threshold",
+        type=float,
+        default=0.1,
+        help="Epistemic uncertainty threshold for flagging manual review.",
+    )
     return parser.parse_args()
 
 
@@ -141,6 +165,91 @@ def _collect_predictions(
     return y_true, y_pred, y_prob
 
 
+def _collect_uncertainty(
+    model: PathogenicityPredictor,
+    datamodule: PathogenicityDataModule,
+    n_forward_passes: int = 50,
+    expand_mask_fn: Any = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Run MC Dropout uncertainty estimation on the test set.
+
+    Args:
+        model: The trained model.
+        datamodule: The data module with test data set up.
+        n_forward_passes: Number of stochastic forward passes.
+        expand_mask_fn: Function to expand the modality mask.
+
+    Returns:
+        Tuple of ``(epistemic_uncertainty, predictive_entropy, mean_probs)``.
+    """
+    mc_predictor = MCDropoutPredictor(model, n_forward_passes=n_forward_passes)
+    device = next(model.parameters()).device
+
+    all_uncertainty: list[np.ndarray] = []
+    all_entropy: list[np.ndarray] = []
+    all_mean_probs: list[np.ndarray] = []
+
+    test_loader = datamodule.test_dataloader()
+
+    for batch in test_loader:
+        batch_device = {
+            k: v.to(device) if isinstance(v, torch.Tensor) else v
+            for k, v in batch.items()
+        }
+        if expand_mask_fn is not None:
+            batch_device = expand_mask_fn(batch_device)
+
+        result = mc_predictor.predict_with_uncertainty(batch_device)
+        all_uncertainty.append(result["epistemic_uncertainty"].cpu().numpy())
+        all_entropy.append(result["predictive_entropy"].cpu().numpy())
+        all_mean_probs.append(result["mean_probs"].cpu().numpy())
+
+    return (
+        np.concatenate(all_uncertainty),
+        np.concatenate(all_entropy),
+        np.concatenate(all_mean_probs),
+    )
+
+
+def _collect_logits(
+    module: PathogenicityLightningModule,
+    datamodule: PathogenicityDataModule,
+    split: str = "val",
+) -> tuple[np.ndarray, np.ndarray]:
+    """Collect raw logits and labels from a data split for calibration.
+
+    Args:
+        module: The Lightning module.
+        datamodule: Data module with data set up.
+        split: Which split (``"val"`` or ``"test"``).
+
+    Returns:
+        Tuple of ``(logits, labels)`` numpy arrays.
+    """
+    module.eval()
+    device = next(module.parameters()).device
+
+    loader_fn = getattr(datamodule, f"{split}_dataloader")
+    loader = loader_fn()
+
+    all_logits: list[np.ndarray] = []
+    all_labels: list[np.ndarray] = []
+
+    with torch.no_grad():
+        for batch in loader:
+            labels = batch["label"]
+            batch_device = {
+                k: v.to(device) if isinstance(v, torch.Tensor) else v
+                for k, v in batch.items()
+            }
+            batch_device = module._expand_modality_mask(batch_device)
+            outputs = module.model(batch_device)
+            all_logits.append(outputs["logits"].cpu().numpy())
+            all_labels.append(labels.numpy())
+
+    return np.concatenate(all_logits), np.concatenate(all_labels)
+
+
 def _flatten_features(
     datamodule: PathogenicityDataModule, split: str,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -183,6 +292,7 @@ def _save_results(
     report_df: pd.DataFrame,
     baseline_df: pd.DataFrame | None,
     bio_results: dict[str, Any] | None,
+    uncertainty_results: dict[str, Any] | None = None,
 ) -> None:
     """Save all evaluation results to disk.
 
@@ -194,6 +304,7 @@ def _save_results(
         report_df: Classification report DataFrame.
         baseline_df: Optional baseline comparison DataFrame.
         bio_results: Optional biological validation results.
+        uncertainty_results: Optional uncertainty estimation results.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -223,6 +334,21 @@ def _save_results(
         with (output_dir / "biological_validation.json").open("w", encoding="utf-8") as fh:
             json.dump(bio_results, fh, indent=2, default=str)
         logger.info("Saved biological validation to %s", output_dir / "biological_validation.json")
+
+    if uncertainty_results is not None:
+        with (output_dir / "uncertainty_results.json").open("w", encoding="utf-8") as fh:
+            json.dump(uncertainty_results, fh, indent=2, default=str)
+        logger.info("Saved uncertainty results to %s", output_dir / "uncertainty_results.json")
+
+        if "predictions_df" in uncertainty_results:
+            pred_df = pd.DataFrame(uncertainty_results["predictions_df"])
+            pred_df.to_csv(
+                output_dir / "uncertainty_augmented_predictions.csv", index=False,
+            )
+            logger.info(
+                "Saved uncertainty-augmented predictions to %s",
+                output_dir / "uncertainty_augmented_predictions.csv",
+            )
 
 
 def _print_summary(
@@ -372,10 +498,107 @@ def main() -> None:
         except Exception:
             log.exception("Biological validation failed")
 
+    uncertainty_results: dict[str, Any] | None = None
+    if not args.skip_uncertainty:
+        log.info("Running MC Dropout uncertainty estimation (%d passes)...", args.mc_passes)
+        try:
+            epistemic_unc, pred_entropy, mc_probs = _collect_uncertainty(
+                module.model,
+                datamodule,
+                n_forward_passes=args.mc_passes,
+                expand_mask_fn=module._expand_modality_mask,
+            )
+
+            ece_before = compute_ece(y_true, y_prob, n_bins=15)
+
+            log.info("Fitting temperature scaling on validation set...")
+            val_logits, val_labels = _collect_logits(module, datamodule, split="val")
+            scaler = TemperatureScaling()
+            val_logits_t = torch.tensor(val_logits, dtype=torch.float32)
+            val_labels_t = torch.tensor(val_labels, dtype=torch.long)
+            optimal_temp = scaler.optimize_temperature(val_logits_t, val_labels_t)
+
+            test_logits_t = torch.tensor(
+                np.concatenate([
+                    module.model(
+                        {k: v.to(next(module.parameters()).device)
+                         if isinstance(v, torch.Tensor) else v
+                         for k, v in module._expand_modality_mask(batch).items()}
+                    )["logits"].cpu().detach().numpy()
+                    for batch in datamodule.test_dataloader()
+                ]),
+                dtype=torch.float32,
+            )
+            calibrated_probs = scaler(test_logits_t).detach().numpy()
+            ece_after = compute_ece(y_true, calibrated_probs, n_bins=15)
+
+            high_unc_mask = epistemic_unc > args.uncertainty_threshold
+            n_flagged = int(high_unc_mask.sum())
+
+            per_class_stats: dict[str, dict[str, float]] = {}
+            for cls_idx, cls_name in enumerate(CLASS_NAMES):
+                cls_mask = y_true == cls_idx
+                if cls_mask.sum() > 0:
+                    per_class_stats[cls_name] = {
+                        "mean_uncertainty": float(epistemic_unc[cls_mask].mean()),
+                        "std_uncertainty": float(epistemic_unc[cls_mask].std()),
+                        "mean_entropy": float(pred_entropy[cls_mask].mean()),
+                        "std_entropy": float(pred_entropy[cls_mask].std()),
+                    }
+
+            predictions_df_data: dict[str, list[Any]] = {
+                "true_label": y_true.tolist(),
+                "predicted_label": y_pred.tolist(),
+                "epistemic_uncertainty": epistemic_unc.tolist(),
+                "predictive_entropy": pred_entropy.tolist(),
+                "flagged_for_review": high_unc_mask.tolist(),
+            }
+            for cls_idx, cls_name in enumerate(CLASS_NAMES):
+                predictions_df_data[f"prob_{cls_name}"] = mc_probs[:, cls_idx].tolist()
+                predictions_df_data[f"calibrated_prob_{cls_name}"] = (
+                    calibrated_probs[:, cls_idx].tolist()
+                )
+
+            uncertainty_results = {
+                "ece_before_calibration": ece_before,
+                "ece_after_calibration": ece_after,
+                "optimal_temperature": optimal_temp,
+                "mc_dropout_passes": args.mc_passes,
+                "uncertainty_threshold": args.uncertainty_threshold,
+                "n_flagged_for_review": n_flagged,
+                "pct_flagged_for_review": float(n_flagged / len(y_true) * 100),
+                "per_class_uncertainty": per_class_stats,
+                "predictions_df": predictions_df_data,
+            }
+
+            metrics["ece_before_calibration"] = ece_before
+            metrics["ece_after_calibration"] = ece_after
+            metrics["optimal_temperature"] = optimal_temp
+
+            log.info("ECE before calibration: %.4f", ece_before)
+            log.info("ECE after calibration:  %.4f", ece_after)
+            log.info("Optimal temperature:    %.4f", optimal_temp)
+            log.info(
+                "Flagged for manual review: %d / %d (%.1f%%)",
+                n_flagged, len(y_true), n_flagged / len(y_true) * 100,
+            )
+            for cls_name, stats in per_class_stats.items():
+                log.info(
+                    "  %-20s: unc=%.4f +/- %.4f  ent=%.4f +/- %.4f",
+                    cls_name,
+                    stats["mean_uncertainty"],
+                    stats["std_uncertainty"],
+                    stats["mean_entropy"],
+                    stats["std_entropy"],
+                )
+        except Exception:
+            log.exception("Uncertainty estimation failed")
+
     _print_summary(metrics, ci_results, cm)
 
     _save_results(
-        output_dir, metrics, ci_results, cm, report_df, baseline_df, bio_results,
+        output_dir, metrics, ci_results, cm, report_df, baseline_df,
+        bio_results, uncertainty_results,
     )
 
     log.info("Evaluation complete. Results saved to %s", output_dir)
