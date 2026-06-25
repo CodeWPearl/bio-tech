@@ -48,6 +48,9 @@ class PathogenicityPredictor(BaseModel):
         self.fusion_dim: int = model_cfg.fusion_dim
         dropout: float = model_cfg.dropout
 
+        disabled = model_cfg.get("disabled_modalities", None)
+        self.disabled_modalities: set[str] = set(disabled) if disabled else set()
+
         # --- per-modality encoders -------------------------------------------
         self.encoders = nn.ModuleDict()
         self._modality_dims: dict[str, int] = {}
@@ -154,6 +157,9 @@ class PathogenicityPredictor(BaseModel):
     ) -> dict[str, torch.Tensor]:
         """Run each modality through its encoder.
 
+        Disabled modalities (from config) are replaced with zero vectors
+        so the fusion module receives a consistent number of embeddings.
+
         Args:
             batch: Mapping containing modality feature tensors.
 
@@ -166,9 +172,14 @@ class PathogenicityPredictor(BaseModel):
                 continue
             encoder = self.encoders[name]
             if hasattr(encoder, "encode"):
-                embeddings[name] = encoder.encode(batch[name])
+                emb = encoder.encode(batch[name])
             else:
-                embeddings[name] = encoder(batch[name])
+                emb = encoder(batch[name])
+
+            if name in self.disabled_modalities:
+                emb = torch.zeros_like(emb)
+
+            embeddings[name] = emb
         return embeddings
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
@@ -199,7 +210,11 @@ class PathogenicityPredictor(BaseModel):
             ``attention_weights``.
         """
         modality_embeddings = self._encode_modalities(batch)
-        modality_mask = batch["modality_mask"]
+        modality_mask = batch["modality_mask"].clone()
+
+        for i, name in enumerate(MODALITY_NAMES):
+            if name in self.disabled_modalities:
+                modality_mask[:, i] = False
 
         attention_weights: torch.Tensor | None = None
 
