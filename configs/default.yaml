@@ -42,6 +42,17 @@ training:
   scheduler_factor: 0.5
   num_workers: 4
 
+pretrain:
+  expression_ae_path: "results/checkpoints/expression_ae_pretrained.pt"
+  methylation_ae_path: "results/checkpoints/methylation_ae_pretrained.pt"
+  expression_vae_path: "results/checkpoints/expression_vae_pretrained.pt"
+  methylation_vae_path: "results/checkpoints/methylation_vae_pretrained.pt"
+  freeze_epochs: 5
+  pretrain_epochs: 100
+  pretrain_lr: 0.001
+  pretrain_batch_size: 128
+  beta: 0.5
+
 experiment:
   name: "default"
   tracking_uri: "mlruns"

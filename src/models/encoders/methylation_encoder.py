@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import math
+from pathlib import Path
 
 import torch
 from torch import nn
@@ -99,6 +100,40 @@ class MethylationDenseAutoencoder(BaseModel):
         z = self.encode(x)
         recon = self.decode(z)
         return {"embedding": z, "reconstruction": recon}
+
+    def load_pretrained_weights(
+        self,
+        checkpoint_path: str | Path,
+        freeze: bool = False,
+    ) -> None:
+        """Load pretrained encoder weights from a checkpoint.
+
+        Only the encoder half is loaded; decoder weights are ignored.
+        Optionally freezes encoder parameters.
+
+        Args:
+            checkpoint_path: Path to the saved ``.pt`` checkpoint.
+            freeze: If ``True``, set ``requires_grad=False`` on all
+                encoder parameters.
+        """
+        checkpoint_path = Path(checkpoint_path)
+        state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+        encoder_state = {
+            k: v for k, v in state_dict.items() if k.startswith("encoder.")
+        }
+        if encoder_state:
+            self.load_state_dict(encoder_state, strict=False)
+            logger.info(
+                "Loaded %d pretrained encoder keys from %s",
+                len(encoder_state), checkpoint_path,
+            )
+        else:
+            logger.warning("No encoder keys found in %s", checkpoint_path)
+
+        if freeze:
+            for param in self.encoder.parameters():
+                param.requires_grad = False
+            logger.info("Froze encoder parameters")
 
 
 class MethylationVAE(BaseModel):
@@ -202,6 +237,47 @@ class MethylationVAE(BaseModel):
             "logvar": logvar,
             "reconstruction": recon,
         }
+
+    def load_pretrained_weights(
+        self,
+        checkpoint_path: str | Path,
+        freeze: bool = False,
+    ) -> None:
+        """Load pretrained encoder weights from a checkpoint.
+
+        Loads ``encoder_body``, ``fc_mu``, and ``fc_logvar`` weights;
+        decoder weights are ignored. Optionally freezes encoder
+        parameters.
+
+        Args:
+            checkpoint_path: Path to the saved ``.pt`` checkpoint.
+            freeze: If ``True``, set ``requires_grad=False`` on all
+                encoder parameters.
+        """
+        checkpoint_path = Path(checkpoint_path)
+        state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+        encoder_prefixes = ("encoder_body.", "fc_mu.", "fc_logvar.")
+        encoder_state = {
+            k: v for k, v in state_dict.items()
+            if any(k.startswith(p) for p in encoder_prefixes)
+        }
+        if encoder_state:
+            self.load_state_dict(encoder_state, strict=False)
+            logger.info(
+                "Loaded %d pretrained VAE encoder keys from %s",
+                len(encoder_state), checkpoint_path,
+            )
+        else:
+            logger.warning("No VAE encoder keys found in %s", checkpoint_path)
+
+        if freeze:
+            for param in self.encoder_body.parameters():
+                param.requires_grad = False
+            for param in self.fc_mu.parameters():
+                param.requires_grad = False
+            for param in self.fc_logvar.parameters():
+                param.requires_grad = False
+            logger.info("Froze VAE encoder parameters")
 
 
 class MethylationTransformerEncoder(BaseModel):

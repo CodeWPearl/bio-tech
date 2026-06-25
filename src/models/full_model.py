@@ -7,6 +7,7 @@ end-to-end :class:`PathogenicityPredictor`.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -114,6 +115,39 @@ class PathogenicityPredictor(BaseModel):
                 num_classes=self.num_classes,
             )
             self.embedding_projection = None
+
+        # --- load pretrained encoder weights (if configured) ----------------
+        self._load_pretrained_encoders(config)
+
+    def _load_pretrained_encoders(self, config: Config) -> None:
+        """Load pretrained encoder weights if paths are set in config.
+
+        Args:
+            config: Project configuration; checks ``config.pretrain``
+                for checkpoint paths.
+        """
+        pretrain_cfg = config.get("pretrain", None)
+        if pretrain_cfg is None:
+            return
+
+        if isinstance(pretrain_cfg, dict):
+            pretrain_cfg = Config(pretrain_cfg)
+
+        freeze = bool(getattr(pretrain_cfg, "freeze_epochs", 0) > 0)
+
+        expr_ae_path = getattr(pretrain_cfg, "expression_ae_path", None)
+        if expr_ae_path and Path(expr_ae_path).is_file():
+            encoder = self.encoders["expression"]
+            if hasattr(encoder, "load_pretrained_weights"):
+                encoder.load_pretrained_weights(expr_ae_path, freeze=freeze)
+                logger.info("Loaded pretrained expression AE weights")
+
+        meth_ae_path = getattr(pretrain_cfg, "methylation_ae_path", None)
+        if meth_ae_path and Path(meth_ae_path).is_file():
+            encoder = self.encoders["methylation"]
+            if hasattr(encoder, "load_pretrained_weights"):
+                encoder.load_pretrained_weights(meth_ae_path, freeze=freeze)
+                logger.info("Loaded pretrained methylation AE weights")
 
     def _build_fusion(self, dropout: float) -> None:
         """Instantiate the fusion module based on ``self.fusion_type``.
