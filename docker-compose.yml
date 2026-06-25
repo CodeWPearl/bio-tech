@@ -1,0 +1,105 @@
+# Cancer Mutation Pathogenicity Predictor — Docker Compose
+#
+# Usage:
+#   docker compose up train        # train the model (GPU required)
+#   docker compose up mlflow       # launch MLflow UI at http://localhost:5000
+#   docker compose up evaluate     # evaluate a trained model
+#   docker compose up inference    # run inference on new variants
+#   docker compose up test         # run the test suite
+
+services:
+  # --- Training service (GPU) ------------------------------------------------
+  train:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cancer-pathogenicity-train
+    command: ["scripts/train.py", "--config", "configs/default.yaml"]
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./configs:/app/configs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CUDA_VISIBLE_DEVICES=0
+
+  # --- MLflow UI service (port 5000) -----------------------------------------
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cancer-pathogenicity-mlflow
+    entrypoint: ["mlflow", "ui"]
+    command: ["--host", "0.0.0.0", "--port", "5000", "--backend-store-uri", "mlruns"]
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/app/mlruns
+      - ./results:/app/results
+
+  # --- Evaluation service (GPU) ----------------------------------------------
+  evaluate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cancer-pathogenicity-evaluate
+    command:
+      - "scripts/evaluate.py"
+      - "--checkpoint"
+      - "results/checkpoints/best_model.ckpt"
+      - "--config"
+      - "configs/default.yaml"
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./configs:/app/configs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # --- Inference service (GPU) -----------------------------------------------
+  inference:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cancer-pathogenicity-inference
+    command:
+      - "scripts/inference.py"
+      - "--checkpoint"
+      - "results/checkpoints/best_model.ckpt"
+      - "--input"
+      - "data/my_variants.tsv"
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./configs:/app/configs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # --- Test suite ------------------------------------------------------------
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cancer-pathogenicity-test
+    entrypoint: ["python", "-m"]
+    command: ["pytest", "tests/", "-v", "--tb=short"]
+    volumes:
+      - ./tests:/app/tests
+      - ./src:/app/src
