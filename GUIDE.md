@@ -210,6 +210,175 @@ git commit -m "message"   # save a snapshot with a short description
 > what to do next. **Newest at the top.** This section is updated at the end of
 > every session.
 
+### Session 16 — Hyperparameter optimisation with Optuna — *2026-06-26*
+
+**Goal:** Implement a complete Optuna-based hyperparameter optimisation
+(HPO) pipeline that systematically searches for the best model
+configuration, integrates with MLflow for experiment tracking, and
+supports retraining the final model with the best-found parameters.
+
+**Plain-English background (what the new words mean):**
+- **Hyperparameter optimisation (HPO)** — instead of manually picking
+  learning rate, dropout, etc., an algorithm (Optuna) automatically
+  tries many combinations and finds the best ones. Like having a robot
+  chef test 50 versions of a recipe to find the tastiest one.
+- **Optuna** — a Python library for automated hyperparameter search. It
+  uses smart algorithms (TPE) to focus on promising regions of the
+  search space rather than trying random combinations blindly.
+- **TPE (Tree-structured Parzen Estimator)** — Optuna's default search
+  algorithm. It builds a probabilistic model of which hyperparameter
+  values tend to produce good results, and focuses future trials on
+  those regions. Much more efficient than random or grid search.
+- **Trial** — one complete training run with a specific set of
+  hyperparameters. Each trial trains the model, evaluates on validation
+  data, and reports the score.
+- **Study** — the collection of all trials. The study tracks which
+  combinations have been tried and their scores, and decides what to
+  try next.
+- **Pruning (MedianPruner)** — stopping a trial early if it's clearly
+  performing worse than the median of previous trials at the same
+  training epoch. Saves time by not wasting compute on bad
+  configurations.
+- **Search space** — the ranges and options for each hyperparameter.
+  For example, learning_rate is searched in log-uniform [1e-5, 1e-2],
+  batch_size is chosen from {32, 64, 128}, and fusion_type from
+  {early, attention, cross_attention, transformer}.
+- **Log-uniform** — a distribution where the logarithm is uniformly
+  distributed. Used for parameters like learning rate that span several
+  orders of magnitude (0.00001 to 0.01).
+- **Parameter importance** — Optuna can estimate which hyperparameters
+  had the biggest impact on performance. Useful for understanding what
+  matters most.
+- **Parallel coordinate plot** — a visualisation where each vertical
+  axis is a hyperparameter and each line is a trial. The line's colour
+  shows performance. Helps spot patterns in good configurations.
+- **SQLite storage** — the study's history is saved to a database file
+  (results/hpo_study.db) so it can be resumed if interrupted, and
+  analysed later.
+
+**What was created/changed:**
+- `configs/sweep.yaml` — **HPO sweep configuration file**:
+  - `hpo.search_space` — defines all 9 hyperparameters to search:
+    - `learning_rate`: log-uniform [1e-5, 1e-2]
+    - `batch_size`: categorical {32, 64, 128}
+    - `dropout`: uniform [0.1, 0.5]
+    - `fusion_type`: categorical {early, attention, cross_attention,
+      transformer}
+    - `mutation_embed_dim`: categorical {64, 128, 256}
+    - `expression_embed_dim`: categorical {128, 256, 512}
+    - `focal_loss_gamma`: uniform [0.5, 5.0]
+    - `weight_decay`: log-uniform [1e-6, 1e-2]
+    - `num_attention_heads`: categorical {2, 4, 8}
+  - `hpo.training` — HPO trial settings: 30 max epochs, patience 10
+  - `hpo.retrain` — retrain settings: 100 epochs, patience 20
+  - `hpo.n_trials`: 50 (configurable via CLI --n-trials)
+  - `hpo.sampler`: TPE | `hpo.pruner`: MedianPruner
+  - `hpo.storage`: SQLite at results/hpo_study.db
+  - Includes full data/model/training/experiment sections as base config
+
+- `scripts/run_hpo.py` — **Complete HPO pipeline**:
+  - **`suggest_hyperparameters(trial, search_space)`** — maps the YAML
+    search space definition to Optuna's suggest API. Supports float
+    (uniform & log-uniform), int, and categorical types.
+  - **`apply_hpo_params(base_cfg, params)`** — applies suggested
+    hyperparameters to a Config object, mapping each param to its
+    correct section (model vs training).
+  - **`create_objective(sweep_cfg, gpus)`** — factory that creates the
+    Optuna objective closure. Each trial: suggests params → builds
+    Config → creates DataModule + Model + LightningModule → trains
+    with early stopping + pruning callback → returns val_auroc.
+  - **MLflow integration** — each trial is logged as an MLflow run with
+    hyperparameters as parameters and val_auroc as metric.
+  - **`save_best_config(sweep_cfg, best_params, output_path)`** — saves
+    the best configuration to `configs/best.yaml` with the HPO section
+    stripped out so it's a valid training config.
+  - **`generate_plots(study, output_dir)`** — generates three Optuna
+    visualisation plots: optimization history, parallel coordinate, and
+    parameter importance (HTML + PNG via plotly).
+  - **`retrain_with_best(sweep_cfg, best_params, gpus, output_dir)`** —
+    retrains the model with the best config on the full train+val data,
+    evaluates on the test set, saves metrics to
+    `results/tables/hpo_test_metrics.json`.
+  - **CLI flags**: `--config`, `--n-trials`, `--timeout`, `--retrain`,
+    `--gpus`, `--output-dir`.
+  - Study summary saved to `results/tables/hpo_summary.json`.
+
+- `tests/test_hpo.py` — **45 new tests** (now 545 total) covering:
+  - **suggest_hyperparameters** (12 tests): all params returned,
+    learning_rate/dropout/focal_loss_gamma/weight_decay in range,
+    batch_size/fusion_type/mutation_embed_dim/expression_embed_dim/
+    num_attention_heads are valid categoricals, unknown type raises
+    ValueError, int type supported.
+  - **apply_hpo_params** (11 tests): each param applied to correct
+    config section, multiple params applied simultaneously, original
+    config not mutated, unknown params silently ignored.
+  - **save_best_config** (5 tests): saves valid YAML, params reflected
+    in saved file, hpo section removed, required sections present,
+    creates parent directories.
+  - **Study creation** (5 tests): TPE sampler, MedianPruner, maximize
+    direction, SQLite storage, study reload with load_if_exists.
+  - **generate_plots** (3 tests): creates output dir, no crash with
+    empty study, no crash with single trial.
+  - **create_objective** (1 test): returns callable.
+  - **sweep.yaml validation** (8 tests): config loads, has search
+    space with all 9 params, has training/retrain/study settings,
+    all types valid, categoricals have choices, floats have bounds.
+
+**New dependencies installed:**
+- `optuna` — hyperparameter optimisation framework
+- `optuna-integration[pytorch_lightning]` — Optuna's PyTorch Lightning
+  pruning callback integration
+
+**Commands run this session (and what they did):**
+```powershell
+# Installed HPO dependencies:
+pip install optuna                                     # → installed optuna 4.9.0
+pip install "optuna-integration[pytorch_lightning]"     # → installed optuna-integration 4.9.0
+
+# Ran all 45 new HPO tests:
+python -m pytest tests/test_hpo.py -v                  # → 45 passed in ~28s
+
+# Ran the full test suite (all modules):
+python -m pytest tests/ -v                             # → 545 passed in ~107s
+```
+
+**Usage (how to run HPO once data is available):**
+```powershell
+# Run HPO with default settings (50 trials):
+python scripts/run_hpo.py --config configs/sweep.yaml
+
+# Run with more trials and a timeout:
+python scripts/run_hpo.py --config configs/sweep.yaml --n-trials 100 --timeout 3600
+
+# Run HPO and retrain with best config:
+python scripts/run_hpo.py --config configs/sweep.yaml --retrain
+
+# After HPO, train with the best config:
+python scripts/train.py --config configs/best.yaml
+```
+
+**Output files produced:**
+| File | Description |
+|------|-------------|
+| `results/hpo_study.db` | SQLite database with full study history |
+| `results/tables/hpo_summary.json` | Best trial, params, and statistics |
+| `configs/best.yaml` | Best config ready for training |
+| `results/figures/hpo/optimization_history.html/.png` | AUROC over trials |
+| `results/figures/hpo/parallel_coordinate.html/.png` | Param–score patterns |
+| `results/figures/hpo/param_importances.html/.png` | Which params matter most |
+| `results/tables/hpo_test_metrics.json` | Test set metrics (if --retrain) |
+
+**Status:** ✅ Done and verified — all 545 tests pass; the HPO pipeline
+is fully configurable via `configs/sweep.yaml`, integrates with MLflow,
+supports Optuna pruning, saves study to SQLite, generates visualisation
+plots, and can retrain with the best configuration.
+
+**What's next (Session 17):** Run the full data pipeline (download
+ClinVar + cBioPortal data, merge, split), then run HPO to find the best
+hyperparameters for the pathogenicity prediction model.
+
+---
+
 ### Session 15 — Publication-quality figure generation — *2026-06-26*
 
 **Goal:** Implement `scripts/generate_figures.py` — a complete figure
