@@ -210,6 +210,260 @@ git commit -m "message"   # save a snapshot with a short description
 > what to do next. **Newest at the top.** This section is updated at the end of
 > every session.
 
+### Session 15 — Publication-quality figure generation — *2026-06-26*
+
+**Goal:** Implement `scripts/generate_figures.py` — a complete figure
+generation pipeline that produces all 12 publication-quality figures for the
+journal paper, saved as both PDF (for LaTeX) and PNG (for preview) at 300 DPI
+with journal-standard typography.
+
+**Plain-English background (what the new words mean):**
+- **Publication-quality figures** — figures that meet the standards of
+  scientific journals: high resolution (300 DPI), clean fonts (Arial/DejaVu
+  Sans), proper axis labels, colorblind-friendly palettes, and both PDF and
+  PNG formats. PDF embeds vector graphics (infinitely zoomable, required by
+  most journals); PNG is a rasterised preview.
+- **Colorblind-friendly palette** — a set of colours specifically chosen to
+  be distinguishable by people with colour vision deficiency (~8% of men).
+  We use seaborn's "colorblind" palette throughout.
+- **Synthetic demo data** — since the full training pipeline hasn't been run
+  yet (no real model predictions), each figure function generates realistic
+  placeholder data. When real results files exist in `results/tables/`, the
+  figures automatically use those instead.
+- **Venn diagram** — a diagram showing overlapping circles to visualise which
+  samples have which combinations of omics data (expression, methylation,
+  CNV). Uses the `matplotlib-venn` library.
+- **Beeswarm plot** — a SHAP visualisation where each dot is one sample, the
+  x-axis is the SHAP value (how much that feature pushed the prediction),
+  and the colour shows the feature's value. Reveals both importance and
+  direction of effect.
+- **Calibration plot** — compares stated model confidence (x-axis) against
+  actual accuracy (y-axis). A perfectly calibrated model follows the
+  diagonal. Points below = overconfident.
+
+**What was created/changed:**
+- `scripts/generate_figures.py` — **Complete rewrite** (replaced stub) with
+  12 figure-generation functions:
+
+  1. **Figure 1: Model Architecture Diagram** — schematic showing inputs →
+     encoders → cross-attention fusion → classifier → output classes, with
+     dimensionality annotations at each stage. Built with matplotlib patches
+     and arrows.
+
+  2. **Figure 2: Dataset Statistics (4-panel)** —
+     (a) Class distribution bar chart with counts,
+     (b) Top 20 genes by variant count (horizontal bars),
+     (c) Variant type distribution (pie chart),
+     (d) Multi-omics data availability Venn diagram.
+
+  3. **Figure 3: Learning Curves (2-panel)** —
+     (a) Training loss vs. validation loss over epochs,
+     (b) Validation AUROC over epochs with best-epoch marker.
+     Loads from `training_log.csv` if available.
+
+  4. **Figure 4: ROC Curves** — one-vs-rest ROC for each of the 4 classes
+     plus micro-average and macro-average curves, with AUROC values in the
+     legend. Diagonal reference line for random classifier.
+
+  5. **Figure 5: PR Curves** — same format as ROC curves but for
+     precision-recall, with Average Precision (AP) values in the legend.
+
+  6. **Figure 6: Confusion Matrix** — heatmap with both raw counts AND
+     row-normalised percentages in each cell. Proper class labels on axes.
+     Loads from `confusion_matrix.csv` if available.
+
+  7. **Figure 7: Baseline Comparison** — grouped bar chart comparing our
+     deep learning model vs. all baselines (XGBoost, LightGBM, Random
+     Forest, Logistic Regression, MLP) on 5 key metrics with 95% CI error
+     bars. Loads from `baseline_comparison.csv` if available.
+
+  8. **Figure 8: Ablation Study** — horizontal bar chart showing performance
+     drop (Δ%) for each ablation variant, ordered by impact magnitude.
+     Red bars for negative drops. Loads from `ablation_results.csv` if
+     available.
+
+  9. **Figure 9: SHAP Analysis (3-panel)** —
+     (a) Global feature importance (top 30 features by mean |SHAP|),
+     (b) Modality importance comparison (bar chart),
+     (c) SHAP beeswarm plot for top 20 features with feature-value
+     colour mapping.
+
+  10. **Figure 10: Attention Weights** — cross-modality attention heatmap
+      (5×5) showing average attention patterns across the test set, with
+      numeric annotations.
+
+  11. **Figure 11: Uncertainty Analysis (3-panel)** —
+      (a) Calibration plot before and after temperature scaling with ECE
+      values,
+      (b) Epistemic uncertainty distribution for correct vs. incorrect
+      predictions,
+      (c) Accuracy vs. confidence histogram with dual y-axes.
+
+  12. **Figure 12: Biological Validation (2-panel)** —
+      (a) Agreement rate with ClinVar review stars (0–4) with sample
+      counts,
+      (b) Performance on COSMIC driver genes vs. non-driver genes
+      (accuracy and recall). Loads from `biological_validation.json` if
+      available.
+
+- **Journal-quality settings applied globally:**
+  - 300 DPI for all saved files
+  - Arial/Helvetica font (DejaVu Sans fallback)
+  - 10pt labels, 8pt tick labels, 12pt titles
+  - Colorblind-friendly seaborn palette
+  - PDF Type 42 fonts (vector, required by most journals)
+  - Removed top and right spines for cleaner look
+
+- **CLI interface:**
+  - `--output-dir` — where to save figures (default: `results/figures`)
+  - `--results-dir` — where to look for result files (default: `results/tables`)
+  - `--skip` — figure numbers to skip (e.g. `--skip 1 3 9`)
+
+- **New dependency:** `matplotlib-venn` for the Venn diagram in Figure 2(d).
+
+**Commands run this session (and what they did):**
+```powershell
+# Installed the Venn diagram library:
+pip install matplotlib-venn   # → installed matplotlib-venn 1.1.2
+
+# Generated all 12 figures (24 files total):
+python scripts/generate_figures.py   # → 12 figures × 2 formats = 24 files
+
+# Ran the full test suite to verify nothing was broken:
+python -m pytest tests/ -v           # → 500 passed in ~107s
+```
+
+**Output files created (in `results/figures/`):**
+| File | Description |
+|------|-------------|
+| `fig01_model_architecture.pdf/.png` | Model architecture schematic |
+| `fig02_dataset_statistics.pdf/.png` | 4-panel dataset overview |
+| `fig03_learning_curves.pdf/.png` | Training/validation curves |
+| `fig04_roc_curves.pdf/.png` | Multi-class ROC curves |
+| `fig05_pr_curves.pdf/.png` | Multi-class PR curves |
+| `fig06_confusion_matrix.pdf/.png` | Confusion matrix heatmap |
+| `fig07_baseline_comparison.pdf/.png` | Model vs. baselines |
+| `fig08_ablation_study.pdf/.png` | Ablation impact chart |
+| `fig09_shap_analysis.pdf/.png` | 3-panel SHAP analysis |
+| `fig10_attention_weights.pdf/.png` | Attention heatmap |
+| `fig11_uncertainty_analysis.pdf/.png` | 3-panel uncertainty |
+| `fig12_biological_validation.pdf/.png` | Biological validation |
+
+**Status:** ✅ Done and verified — all 12 figures generated successfully (24
+files), all 500 existing tests still pass, figures use synthetic demo data
+that will automatically be replaced by real results once the training
+pipeline is run.
+
+**What's next (Session 16):** Run the full data pipeline (download ClinVar +
+cBioPortal data, merge, split) and train the model to produce real results
+that the figures will automatically pick up.
+
+---
+
+### Session 14 — Ablation study framework — *2026-06-25*
+
+**Goal:** Build the ablation study framework that systematically disables
+individual components (modalities, fusion type, loss function) to measure
+each one's contribution to performance — a critical section for the paper
+that proves the value of the multi-omics approach.
+
+**Plain-English background (what the new words mean):**
+- **Ablation study** — a scientific experiment where you remove one piece of
+  the model at a time and measure how much performance drops. If removing
+  the mutation encoder makes accuracy drop by 10%, that proves mutations
+  contribute 10% of the model's power. Like removing one ingredient from a
+  recipe to see how much worse the dish tastes.
+- **Modality ablation** — disabling one data source (e.g. gene expression)
+  by replacing its embedding with zeros and telling the fusion module it's
+  absent. The model still runs, but without that information.
+- **Disabled modalities** — a config-driven list of which data sources to
+  turn off. When a modality is disabled: (1) its embedding is replaced with
+  a zero vector, and (2) its modality mask is set to False so the fusion
+  module knows to ignore it.
+- **Fusion ablation** — swapping the cross-attention fusion (the default) for
+  simple early fusion (concatenation). This tests whether the fancy attention
+  mechanism actually helps.
+- **Loss ablation** — swapping focal loss for standard cross-entropy. This
+  tests whether focal loss's special handling of class imbalance helps.
+- **Performance drop (Δ vs Full)** — the percentage change in each metric
+  compared to the full model. Negative = the removed component was helpful.
+  The larger the drop, the more important that component.
+- **Ablation table** — a publication-ready comparison table with one row per
+  configuration, showing Accuracy, F1-Macro, AUROC, PR-AUC, MCC, and the
+  average delta vs. the full model.
+
+**What was created/changed:**
+- `configs/ablation/` — **8 YAML config files**, one per ablation variant:
+  - `no_mutation.yaml` — disables the mutation encoder
+  - `no_expression.yaml` — disables the expression encoder
+  - `no_methylation.yaml` — disables the methylation encoder
+  - `no_cnv.yaml` — disables the CNV encoder
+  - `no_attention.yaml` — uses early fusion instead of cross-attention
+  - `single_mutation_only.yaml` — only mutation features (all other
+    omics disabled)
+  - `single_expression_only.yaml` — only expression features
+  - `no_focal_loss.yaml` — uses standard cross-entropy loss
+
+- `src/models/full_model.py` — **Updated** with modality ablation support:
+  - New `disabled_modalities` parameter read from config
+    (`model.disabled_modalities` list in YAML)
+  - `_encode_modalities()` — disabled modalities produce zero vectors
+  - `forward()` — disabled modalities have their mask set to False
+  - Fully config-driven: no code changes needed per ablation
+
+- `scripts/run_ablation.py` — **Ablation study runner**:
+  - Iterates through all configs in `configs/ablation/` plus the baseline
+  - For each: trains with same seed/splits, evaluates on test set
+  - Collects all metrics into a comparison DataFrame
+  - Computes Δ vs Full (%) for each metric
+  - Saves `results/tables/ablation_results.csv` and
+    `results/tables/ablation_results.json`
+  - Prints formatted comparison table
+  - CLI flags: `--base-config`, `--configs-dir`, `--output-dir`,
+    `--checkpoint-dir`, `--max-epochs`, `--gpus`, `--skip-training`
+
+- `tests/test_ablation.py` — **39 new tests** (now 500 total) covering:
+  - Disabled modalities: zero embedding verification for each modality,
+    enabled modalities stay nonzero, mask correctly set to False
+  - All 5 fusion types work with disabled modalities
+  - Gradient flow with disabled modalities
+  - Multiple modalities disabled simultaneously
+  - Forward pass with single modality only
+  - Forward pass with all modalities disabled
+  - Ablation config loading: no_mutation, no_expression, no_attention,
+    no_focal_loss, single_mutation_only configs load correctly
+  - Model instantiation from ablation configs
+  - Full model has no disabled modalities
+  - Comparison table: correct structure, Full Model has "—" delta,
+    ablation has negative delta %, metric values preserved, multiple rows
+  - Display names mapping correct
+  - Integration: various disabled combinations produce valid logits,
+    probabilities sum to 1, early fusion works, CE loss works,
+    disabled modality produces different output than full model
+
+**Commands run this session (and what they did):**
+```powershell
+# Ran all 39 new ablation tests:
+python -m pytest tests/test_ablation.py -v   # → 39 passed in ~36s
+
+# Ran the full test suite (all modules):
+python -m pytest tests/ -v                   # → 500 passed in ~171s
+```
+
+> ℹ️ **No new tools to install:** the ablation framework uses only modules
+> already built in previous sessions plus standard `pandas` and `PyYAML`.
+
+**Status:** ✅ Done and verified — all 500 tests pass; the ablation
+framework is fully config-driven, works with all fusion types, correctly
+zeros disabled modality embeddings and masks, and the comparison table
+builder produces publication-ready output.
+
+**What's next (Session 15):** Run the actual ablation study on real data
+(requires dataset download + training). Generate the final ablation table
+for the paper.
+
+---
+
 ### Session 13 — Uncertainty estimation — *2026-06-25*
 
 **Goal:** Build the full uncertainty estimation suite — MC Dropout, deep
