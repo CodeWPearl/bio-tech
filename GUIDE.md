@@ -1330,11 +1330,18 @@ saves publication-ready figures.
 
 ---
 
-### Session 9 — Assembled model + classification head — *2026-06-23*
+### Session 9 — Assembled model + classification head + autoencoder pre-training — *2026-06-23 / 2026-06-26*
 
-**Goal:** Wire together all the per-modality encoders (Session 7) and fusion
-modules (Session 8) into a single end-to-end **PathogenicityPredictor** model
-with a classification head, then verify it works with all five fusion types.
+**Goal (Part 1):** Wire together all the per-modality encoders (Session 7)
+and fusion modules (Session 8) into a single end-to-end
+**PathogenicityPredictor** model with a classification head, then verify it
+works with all five fusion types.
+
+**Goal (Part 2):** Implement a pre-training pipeline that trains
+autoencoder (AE) and variational autoencoder (VAE) encoders on *unlabeled*
+omics data (expression and methylation) BEFORE the main supervised training
+begins, plus add `load_pretrained_weights()` methods and integrate
+pretrained weight loading into the PathogenicityPredictor.
 
 **Plain-English background (what the new words mean):**
 - **Classification head** — the final piece of the neural network that takes
@@ -1355,8 +1362,45 @@ with a classification head, then verify it works with all five fusion types.
 - **Model summary** — a report showing how many learnable parameters are in
   each component (encoders, fusion, classifier). Useful for understanding
   model complexity and checking nothing is unreasonably large.
+- **Pre-training** — training a model on a simpler task first, before
+  the "real" task. Like studying the alphabet before reading a novel.
+  Here, the simpler task is "reconstruct the input" — the autoencoder
+  learns to compress gene data into a small representation and
+  decompress it back. If it can do that well, it has learned meaningful
+  patterns in the data.
+- **Autoencoder (AE)** — a neural network with two halves: an **encoder**
+  compresses the input (2000 gene values) into a small "bottleneck"
+  (e.g. 256 numbers), and a **decoder** tries to reconstruct the
+  original input from that bottleneck. The bottleneck is the useful
+  representation — it captures the most important patterns.
+- **VAE (Variational Autoencoder)** — like an autoencoder, but the
+  bottleneck is a probability distribution rather than a fixed vector.
+  This makes the representations smoother and more robust. The training
+  loss has two parts: reconstruction (MSE) + KL divergence (which keeps
+  the distribution close to a standard normal).
+- **KL divergence** — a measure of how different two probability
+  distributions are. In the VAE, it penalises the model if its learned
+  distribution drifts too far from a standard bell curve. This acts as
+  a regulariser.
+- **Beta (β)** — a weight that controls how much the KL divergence
+  matters relative to the reconstruction loss. β=0.5 means KL counts
+  half as much as reconstruction. Lower β → better reconstruction;
+  higher β → more regularised latent space.
+- **Reconstruction loss (MSE)** — Mean Squared Error between the
+  original input and the autoencoder's output. Lower = better.
+- **Unlabeled data** — for pre-training, we use ALL omics samples from
+  cBioPortal, not just the ones matched to ClinVar labels. cBioPortal
+  has far more samples than ClinVar-matched ones, so pre-training sees
+  much more data.
+- **Freezing weights** — after pre-training, the encoder weights can be
+  "frozen" (locked) during the first N epochs of supervised training.
+  This prevents the supervised training from destroying the patterns
+  learned during pre-training before the rest of the model catches up.
+- **load_pretrained_weights()** — a method added to each encoder that
+  loads saved pre-trained weights (encoder half only, ignoring the
+  decoder) and optionally freezes them.
 
-**What was created/changed:**
+**What was created/changed (Part 1 — assembled model):**
 - `src/models/classifier.py` — **ClassificationHead(nn.Module)**:
   Linear(fusion_dim→128) → BatchNorm → ReLU → Dropout(0.3) →
   Linear(128→64) → BatchNorm → ReLU → Dropout(0.2) → Linear(64→num_classes).
@@ -1397,22 +1441,117 @@ with a classification head, then verify it works with all five fusion types.
   - Utility methods: from_config for all 5 fusions, summary content,
     get_output_dim, encode raises NotImplementedError, get_device.
 
+**What was created/changed (Part 2 — autoencoder pre-training):**
+
+- `scripts/pretrain_autoencoders.py` — **Complete pre-training pipeline**:
+  - `OmicsReconstructionDataset` — simple PyTorch Dataset where
+    input = output (reconstruction task).
+  - `vae_loss(recon, target, mu, logvar, beta)` — computes MSE
+    reconstruction loss + β-weighted KL divergence. Returns
+    (total, recon_loss, kl_loss).
+  - `pretrain_model(model, train_loader, val_loader, ...)` — generic
+    training loop for AE or VAE with:
+    - Adam optimiser
+    - Early stopping on validation loss (configurable patience)
+    - MLflow experiment logging (under "pretrain_autoencoders" experiment)
+    - Best model state restored after training
+  - `load_omics_matrix(data_dir, modality)` — loads expression or
+    methylation data from the feature cache or .npy files.
+  - `create_data_loaders(data, batch_size, val_fraction, seed)` — splits
+    data into train/val and creates DataLoaders.
+  - `run_pretraining(config_path)` — orchestrates all four pre-training
+    runs:
+    1. Expression AE → `results/checkpoints/expression_ae_pretrained.pt`
+    2. Expression VAE → `results/checkpoints/expression_vae_pretrained.pt`
+    3. Methylation AE → `results/checkpoints/methylation_ae_pretrained.pt`
+    4. Methylation VAE → `results/checkpoints/methylation_vae_pretrained.pt`
+  - CLI: `python scripts/pretrain_autoencoders.py --config configs/default.yaml`
+
+- `src/models/encoders/expression_encoder.py` — **Updated** with:
+  - `DenseAutoencoder.load_pretrained_weights(path, freeze)` — loads
+    encoder-only weights from a checkpoint, optionally freezes them.
+  - `VariationalAutoencoder.load_pretrained_weights(path, freeze)` —
+    loads encoder_body, fc_mu, and fc_logvar weights.
+
+- `src/models/encoders/methylation_encoder.py` — **Updated** with:
+  - `MethylationDenseAutoencoder.load_pretrained_weights(path, freeze)`
+  - `MethylationVAE.load_pretrained_weights(path, freeze)`
+
+- `src/models/full_model.py` — **Updated** with:
+  - `PathogenicityPredictor._load_pretrained_encoders(config)` — checks
+    for `config.pretrain.expression_ae_path` and
+    `config.pretrain.methylation_ae_path`; if the checkpoint files exist,
+    loads pretrained weights into the corresponding encoders.
+  - Called automatically during `__init__()`.
+
+- `configs/default.yaml` — **Updated** with new `pretrain` section:
+  - `expression_ae_path`, `methylation_ae_path`, `expression_vae_path`,
+    `methylation_vae_path` — checkpoint paths
+  - `freeze_epochs: 5` — freeze pretrained weights for first 5 epochs
+  - `pretrain_epochs: 100` — max pre-training epochs
+  - `pretrain_lr: 0.001` — pre-training learning rate
+  - `pretrain_batch_size: 128` — pre-training batch size
+  - `beta: 0.5` — KL divergence weight for VAE
+
+- `tests/test_pretrain.py` — **32 new tests** (now 588 total) covering:
+  - **OmicsReconstructionDataset** (4 tests): length, item shape, dtype,
+    value match.
+  - **VAE loss** (5 tests): returns 3 tensors, total = recon + β·KL,
+    KL ≈ 0 for standard normal, KL > 0 for non-standard, recon = MSE.
+  - **create_data_loaders** (3 tests): returns 2 loaders, correct split
+    sizes, correct batch shape.
+  - **AE pre-training** (4 tests): expression AE loss decreases over 5
+    epochs, methylation AE loss decreases, val loss recorded, early
+    stopping triggers.
+  - **VAE pre-training** (3 tests): expression VAE loss decreases,
+    methylation VAE loss decreases, val loss recorded.
+  - **Pretrained weight loading** (6 tests): AE encoder weights loaded
+    correctly, decoder NOT loaded, VAE encoder weights loaded,
+    methylation AE loaded, methylation VAE loaded, string path works.
+  - **Freeze parameters** (4 tests): AE frozen params unchanged after
+    training, VAE frozen params unchanged, methylation AE frozen,
+    methylation VAE frozen.
+  - **Full model integration** (3 tests): PathogenicityPredictor loads
+    pretrained expression AE, works without pretrain section, skips
+    missing checkpoints gracefully.
+
 **Commands run this session (and what they did):**
 ```powershell
-# Ran all 59 new model tests:
+# Part 1:
 python -m pytest tests/test_models.py -v   # → 59 passed in ~9 seconds
-
-# Ran the full test suite (all modules):
 python -m pytest tests/ -v                 # → 301 passed in ~36 seconds
+
+# Part 2:
+python -m pytest tests/test_pretrain.py -v # → 32 passed in ~10s
+python -m pytest tests/ -v                 # → 588 passed in ~131s
 ```
 
-> ℹ️ **No new tools to install:** the assembled model uses only modules
-> built in Sessions 7 and 8 plus `torch` (already installed).
+> ℹ️ **No new tools to install:** both parts use only modules built in
+> previous sessions plus `torch`, `numpy`, and `mlflow` (already installed).
 
-**Status:** ✅ Done and verified — all 301 tests pass; the full model works
+**Usage (how to run pre-training once data is available):**
+```powershell
+# Run pre-training with default settings:
+python scripts/pretrain_autoencoders.py --config configs/default.yaml
+
+# Then train the supervised model (it auto-loads pretrained weights):
+python scripts/train.py --config configs/default.yaml
+```
+
+**Output files produced (Part 2):**
+| File | Description |
+|------|-------------|
+| `results/checkpoints/expression_ae_pretrained.pt` | Pretrained expression AE weights |
+| `results/checkpoints/expression_vae_pretrained.pt` | Pretrained expression VAE weights |
+| `results/checkpoints/methylation_ae_pretrained.pt` | Pretrained methylation AE weights |
+| `results/checkpoints/methylation_vae_pretrained.pt` | Pretrained methylation VAE weights |
+
+**Status:** ✅ Done and verified — all 588 tests pass; the full model works
 end-to-end with all 5 fusion types, handles missing modalities, gradients
-flow through every classification-path parameter, and parameter counts are
-reasonable.
+flow through every classification-path parameter, and the pre-training
+pipeline is complete with AE/VAE training, pretrained weight loading,
+parameter freezing, MLflow logging, and full integration with the
+PathogenicityPredictor model.
 
 **What's next (Session 10):** Build the PyTorch Lightning training module
 with focal loss, evaluation metrics (accuracy, F1, AUROC), and the training
@@ -1515,18 +1654,20 @@ Lightning training module with focal loss and evaluation metrics.
 
 ---
 
-### Session 7 — Modality encoders — *2026-06-23*
+### Session 7 — Modality encoders — *2026-06-23 (updated 2026-06-26)*
 
 **Goal:** Build all the per-modality neural network encoders that compress each
 feature vector into a compact, learned embedding — the step between "clean
-feature array" and "fusion/prediction."
+feature array" and "fusion/prediction." Updated on 2026-06-26 to add the
+missing ClinicalEncoder, fix MutationEncoder to match the 3-layer spec, and
+wire ClinicalEncoder into the full model.
 
 **Plain-English background (what the new words mean):**
 - **Encoder** — a small neural network that takes a long vector of numbers
   (like 2000 gene-expression values) and squeezes it down to a much shorter
   "embedding" vector (like 256 numbers). The network learns *which* of the
   original 2000 numbers matter most. Each data type (mutation, expression,
-  methylation, CNV) gets its own encoder.
+  methylation, CNV, clinical) gets its own encoder.
 - **MLP (Multi-Layer Perceptron)** — the simplest kind of neural network: a
   stack of layers where every neuron connects to every neuron in the next
   layer. Input → hidden layer(s) → output. Good enough for smaller inputs.
@@ -1562,9 +1703,10 @@ feature array" and "fusion/prediction."
   `count_parameters()`, `get_device()`, `get_output_dim()`.
 
 - `src/models/encoders/mutation_encoder.py`:
-  - **MutationEncoder** — 2-layer MLP: Linear(input→256) → BatchNorm → ReLU
-    → Dropout(0.3) → Linear(256→embed_dim) → BatchNorm → ReLU →
-    Dropout(0.2). Works with any input size.
+  - **MutationEncoder** — 3-layer MLP: Linear(input→256) → BatchNorm → ReLU
+    → Dropout(0.3) → Linear(256→128) → BatchNorm → ReLU → Dropout(0.2) →
+    Linear(128→embed_dim) → BatchNorm → ReLU. Works with any input size.
+    *(Updated 2026-06-26: added the 128 intermediate layer to match spec.)*
   - **MutationTransformerEncoder** — splits the 42-feature mutation vector
     into 4 semantic groups (variant type, AA properties, gene features,
     positional), projects each to a token, adds a [CLS] token, runs a
@@ -1599,12 +1741,27 @@ feature array" and "fusion/prediction."
     4-head self-attention to capture gene-gene CNV interactions, then
     mean-pools → output projection → embed_dim.
 
-- `src/models/encoders/__init__.py` — exports all 10 encoder classes.
+- `src/models/encoders/clinical_encoder.py` — *(Added 2026-06-26)*
+  - **ClinicalEncoder** — compact 3-layer MLP for low-dimensional clinical
+    features: Linear(input→64) → BatchNorm → ReLU → Dropout(0.3) →
+    Linear(64→32) → BatchNorm → ReLU → Dropout(0.2) → Linear(32→embed_dim)
+    → BatchNorm → ReLU. Default embed_dim=32. Intentionally small since
+    clinical features (age, sex, cancer type, stage) are much lower-
+    dimensional than omics data.
+
+- `src/models/encoders/__init__.py` — exports all 11 encoder classes
+  (including ClinicalEncoder).
+
+- `src/models/full_model.py` — *(Updated 2026-06-26)* replaced inline
+  `nn.Sequential` clinical encoder with the proper `ClinicalEncoder` class,
+  so the clinical modality uses the same `BaseModel` interface as all others
+  (with `encode()`, `get_output_dim()`, `count_parameters()`).
+
 - `src/models/__init__.py` — exports BaseModel.
 
-- `tests/test_encoders.py` — **77 new tests** covering:
-  - Every encoder: output shape with batch_size=1 (eval mode) and
-    batch_size=32 (train mode).
+- `tests/test_encoders.py` — **88 tests** covering:
+  - Every encoder (all 11 variants): output shape with batch_size=1 (eval
+    mode) and batch_size=32 (train mode).
   - Gradient flow: every trainable parameter receives gradients.
   - `get_output_dim()` matches actual output for multiple embed_dim values.
   - Variable input sizes (encoders handle different dims gracefully).
@@ -1612,19 +1769,35 @@ feature array" and "fusion/prediction."
   - Edge cases: non-divisible Transformer input, auto-inferred group sizes,
     invalid group sizes raise ValueError.
   - BaseModel helpers: `count_parameters()`, `get_device()`.
+  - ClinicalEncoder-specific: default embed_dim is 32, compact parameter
+    count (<10,000), variable input sizes (8/16/32/64).
 
 **Commands run this session (and what they did):**
 ```powershell
-# Ran all 77 encoder tests:
-python -m pytest tests/test_encoders.py -v   # → 77 passed in ~10 seconds
+# Ran all 88 encoder tests:
+python -m pytest tests/test_encoders.py -v   # → 88 passed in ~19 seconds
+
+# Ran encoder + model + fusion tests together:
+python -m pytest tests/test_encoders.py tests/test_models.py tests/test_fusion.py -v
+# → 182 passed in ~16 seconds
 ```
 
 > ℹ️ **No new tools to install:** the encoders use only `torch` (PyTorch),
 > which was installed in Session 6.
 
-**Status:** ✅ Done and verified — all 77 tests pass; all 10 encoder variants
-produce correct output shapes, gradients flow through every parameter, and
-`get_output_dim()` is consistent with actual output.
+**Files created/changed this update (2026-06-26):**
+| File | Change |
+|------|--------|
+| `src/models/encoders/clinical_encoder.py` | **New** — ClinicalEncoder class |
+| `src/models/encoders/mutation_encoder.py` | **Fixed** — added 128 intermediate layer |
+| `src/models/encoders/__init__.py` | **Updated** — added ClinicalEncoder export |
+| `src/models/full_model.py` | **Updated** — uses ClinicalEncoder instead of nn.Sequential |
+| `tests/test_encoders.py` | **Updated** — added ClinicalEncoder tests (88 total) |
+
+**Status:** ✅ Done and verified — all 88 encoder tests pass; all 11 encoder
+variants (including ClinicalEncoder) produce correct output shapes, gradients
+flow through every parameter, `get_output_dim()` is consistent with actual
+output, and all 182 downstream tests (models + fusion) also pass.
 
 **What's next (Session 8):** Build `src/models/fusion/` — the five fusion
 strategies (early, late, attention, cross-attention, transformer) that combine
@@ -2044,20 +2217,37 @@ with these ClinVar labels.
 
 ---
 
-### Session 1 — Project scaffold + utilities — *2026-06-22*
+### Session 1 — Project scaffold + utilities — *2026-06-22 (updated 2026-06-26)*
 
 **Goal:** Build the empty skeleton of the project and the core "plumbing" tools, so
 future sessions have a clean, reproducible foundation.
 
 **What was created:**
 - The full folder structure (`src/`, `scripts/`, `tests/`, `configs/`, `data/`,
-  `results/`, etc.).
-- Packaging files: `pyproject.toml`, `requirements.txt`, `.gitignore`, `README.md`.
-- The settings file: `configs/default.yaml`.
+  `results/`, `notebooks/`, `paper/`, `webapp/`, `api/`, etc.) with all
+  `__init__.py` files.
+  - `src/` subpackages: `data`, `features`, `models` (with `encoders/` and
+    `fusion/` subpackages), `training`, `evaluation`, `explainability`,
+    `uncertainty`, `utils`.
+  - `webapp/` — Streamlit frontend directory (with `__init__.py`).
+  - `api/` — FastAPI backend directory (with `__init__.py`).
+- Packaging files: `pyproject.toml` (with `[project.scripts]` entry points for
+  `train`, `evaluate`, `inference`), `requirements.txt`, `.gitignore`, `README.md`.
+- `requirements.txt` — all dependencies with minimum versions:
+  torch, pytorch-lightning, scikit-learn, xgboost, lightgbm, shap, lime, captum,
+  optuna, mlflow, pandas, numpy, pyarrow, matplotlib, seaborn, plotly, requests,
+  pyyaml, tqdm, pytest, ruff, mypy, **streamlit**, **fastapi**, **uvicorn**,
+  **pydantic**, **reportlab**, **openpyxl**.
+- The settings file: `configs/default.yaml` — full configuration covering `data`,
+  `model`, `training`, `pretrain`, `experiment`, **`webapp`** (host + port 8501),
+  and **`api`** (host + port 8000) sections.
 - Three working utility modules in `src/utils/`:
-  - `config.py` — reads the settings file.
-  - `reproducibility.py` — locks in randomness so results repeat exactly.
-  - `logging_setup.py` — records what the program does to screen + a log file.
+  - `config.py` — reads the YAML settings file with dot-access, CLI override
+    support (`key.path=value`), and config validation.
+  - `reproducibility.py` — `seed_everything()` sets seeds for `random`, `numpy`,
+    `torch`, `torch.cuda`, and makes cuDNN deterministic.
+  - `logging_setup.py` — `setup_logging()` configures Python logging with both
+    console and file handlers (timestamped log files in `results/logs/`).
 - Command stubs: `scripts/train.py`, `evaluate.py`, `inference.py`.
 - Documentation: `ARCHITECTURE.md` (the science) and this `GUIDE.md`.
 
@@ -2071,8 +2261,12 @@ python -m pip install pyyaml                                          # → inst
 # Then confirmed settings load, overrides work, and bad input is rejected → all OK
 ```
 
-**Status:** ✅ Scaffold complete and verified. The project is a clean, empty shell
-with working utilities. No AI model exists yet.
+**Status:** ✅ Scaffold complete and verified. All 10 Session 1 checklist items
+are done — git repo, full directory tree (including `webapp/` and `api/`), all
+`__init__.py` files, `pyproject.toml` with entry points, complete `requirements.txt`
+(29 packages), `.gitignore`, `configs/default.yaml` (with webapp/api sections),
+`config.py`, `reproducibility.py`, `logging_setup.py`, and `README.md`.
+Verification command `python -c "from src.utils.config import load_config; print('OK')"` passes.
 
 **What's next (Session 2):** Build `src/data/` — the code that downloads the real
 medical data (ClinVar labels + cBioPortal omics) and prepares it for training.
