@@ -26,6 +26,7 @@ import torch
 from src.data.datamodule import PathogenicityDataModule
 from src.evaluation.benchmarks import run_baselines
 from src.evaluation.biological_validation import run_biological_validation
+from src.evaluation.external_tools import run_external_comparison
 from src.evaluation.metrics import (
     classification_report_df,
     compute_all_metrics,
@@ -99,6 +100,16 @@ def parse_args() -> argparse.Namespace:
         "--cosmic-path",
         default=None,
         help="Path to COSMIC Cancer Gene Census CSV (optional).",
+    )
+    parser.add_argument(
+        "--dbnsfp-path",
+        default=None,
+        help="Path to dbNSFP scores file (TSV/CSV) for external tool comparison.",
+    )
+    parser.add_argument(
+        "--skip-external",
+        action="store_true",
+        help="Skip external tool comparison (SIFT, PolyPhen-2, CADD, REVEL).",
     )
     parser.add_argument(
         "--skip-uncertainty",
@@ -293,6 +304,7 @@ def _save_results(
     baseline_df: pd.DataFrame | None,
     bio_results: dict[str, Any] | None,
     uncertainty_results: dict[str, Any] | None = None,
+    external_df: pd.DataFrame | None = None,
 ) -> None:
     """Save all evaluation results to disk.
 
@@ -305,6 +317,7 @@ def _save_results(
         baseline_df: Optional baseline comparison DataFrame.
         bio_results: Optional biological validation results.
         uncertainty_results: Optional uncertainty estimation results.
+        external_df: Optional external tool comparison DataFrame.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -334,6 +347,13 @@ def _save_results(
         with (output_dir / "biological_validation.json").open("w", encoding="utf-8") as fh:
             json.dump(bio_results, fh, indent=2, default=str)
         logger.info("Saved biological validation to %s", output_dir / "biological_validation.json")
+
+    if external_df is not None and len(external_df) > 0:
+        external_df.to_csv(output_dir / "external_comparison.csv", index=False)
+        logger.info(
+            "Saved external comparison to %s",
+            output_dir / "external_comparison.csv",
+        )
 
     if uncertainty_results is not None:
         with (output_dir / "uncertainty_results.json").open("w", encoding="utf-8") as fh:
@@ -498,6 +518,31 @@ def main() -> None:
         except Exception:
             log.exception("Biological validation failed")
 
+    external_df = None
+    if not args.skip_external:
+        dbnsfp_path = (
+            Path(args.dbnsfp_path)
+            if args.dbnsfp_path
+            else Path.cwd() / "data" / "processed" / "dbnsfp_scores.tsv"
+        )
+        if dbnsfp_path.is_file():
+            log.info("Running external tool comparison...")
+            try:
+                external_df = run_external_comparison(
+                    dbnsfp_path=dbnsfp_path,
+                    y_true_4class=y_true,
+                    y_pred_4class=y_pred,
+                    y_prob_4class=y_prob,
+                    output_dir=output_dir,
+                )
+            except Exception:
+                log.exception("External tool comparison failed")
+        else:
+            log.warning(
+                "dbNSFP scores not found at %s; skipping external comparison.",
+                dbnsfp_path,
+            )
+
     uncertainty_results: dict[str, Any] | None = None
     if not args.skip_uncertainty:
         log.info("Running MC Dropout uncertainty estimation (%d passes)...", args.mc_passes)
@@ -598,7 +643,7 @@ def main() -> None:
 
     _save_results(
         output_dir, metrics, ci_results, cm, report_df, baseline_df,
-        bio_results, uncertainty_results,
+        bio_results, uncertainty_results, external_df,
     )
 
     log.info("Evaluation complete. Results saved to %s", output_dir)

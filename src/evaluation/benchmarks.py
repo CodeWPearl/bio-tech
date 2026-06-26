@@ -81,11 +81,9 @@ def _build_baselines() -> list[tuple[str, Any]]:
             "Logistic Regression",
             LogisticRegression(
                 max_iter=2000,
-                multi_class="multinomial",
                 solver="lbfgs",
                 C=1.0,
                 random_state=42,
-                n_jobs=-1,
             ),
         ),
         (
@@ -113,7 +111,6 @@ def _build_baselines() -> list[tuple[str, Any]]:
                 subsample=0.8,
                 colsample_bytree=0.8,
                 random_state=42,
-                use_label_encoder=False,
                 eval_metric="mlogloss",
                 n_jobs=-1,
             ),

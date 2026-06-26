@@ -1045,12 +1045,13 @@ explainability analysis on real trained models with actual data.
 
 ---
 
-### Session 11 — Comprehensive evaluation pipeline — *2026-06-23*
+### Session 11 — Comprehensive evaluation pipeline — *2026-06-23 / updated 2026-06-26*
 
 **Goal:** Build the full evaluation pipeline — comprehensive metrics with
 confidence intervals, baseline model comparisons, biological validation
-against COSMIC Cancer Gene Census, and the evaluation script that ties
-everything together for publication-ready results.
+against COSMIC Cancer Gene Census, external tool comparison (SIFT,
+PolyPhen-2, CADD, REVEL), and the evaluation script that ties everything
+together for publication-ready results.
 
 **Plain-English background (what the new words mean):**
 - **Confusion matrix** — a table showing how many samples of each true class
@@ -1094,6 +1095,20 @@ everything together for publication-ready results.
 - **Biological validation** — cross-referencing predictions with known
   biology to ensure the model learns real biological signal, not just
   statistical patterns.
+- **dbNSFP** — a database of precomputed scores from many different
+  pathogenicity predictors for all possible single-nucleotide variants.
+  Freely downloadable, so we can compare our model against established
+  tools without re-running them.
+- **SIFT** — predicts whether an amino-acid substitution affects protein
+  function. Score < 0.05 = "damaging." Based on sequence conservation.
+- **PolyPhen-2** — predicts the functional impact of amino-acid changes
+  using sequence + structural features. HDIV score > 0.957 = "probably
+  damaging."
+- **CADD** — Combined Annotation Dependent Depletion. Integrates many
+  annotations into a single "deleteriousness" score. PHRED score > 20
+  means the variant is in the top 1% most deleterious.
+- **REVEL** — an ensemble method combining 13 individual predictors. Score
+  > 0.5 = pathogenic. Widely used in clinical variant interpretation.
 
 **What was created/changed:**
 - `src/evaluation/metrics.py`:
@@ -1115,6 +1130,9 @@ everything together for publication-ready results.
     all metrics from compute_all_metrics(). Returns a comparison DataFrame.
   - Scales features with StandardScaler before training.
   - Gracefully handles missing optional packages (XGBoost, LightGBM).
+  - *Updated 2026-06-26:* removed deprecated `multi_class` and `n_jobs`
+    params from LogisticRegression, removed deprecated `use_label_encoder`
+    from XGBClassifier — fixes compatibility with scikit-learn ≥1.8.
 
 - `src/evaluation/biological_validation.py`:
   - **Built-in COSMIC Cancer Gene Census** — ~730 genes hardcoded (no
@@ -1131,21 +1149,43 @@ everything together for publication-ready results.
     for pathogenic predictions in driver genes.
   - **run_biological_validation()** — orchestrates all analyses above.
 
-- `scripts/evaluate.py` — **Full evaluation entry point** (replaced stub):
+- `src/evaluation/external_tools.py` (**new, added 2026-06-26**):
+  - **EXTERNAL_THRESHOLDS** — configuration dict for SIFT, PolyPhen-2,
+    CADD, and REVEL with published classification thresholds:
+    * SIFT: score < 0.05 → Damaging (Pathogenic)
+    * PolyPhen-2 (HDIV): score > 0.957 → Probably Damaging
+    * CADD: PHRED score > 20 → Pathogenic
+    * REVEL: score > 0.5 → Pathogenic
+  - **map_to_binary()** — maps 4-class labels (Pathogenic, Likely
+    Pathogenic, Benign, Likely Benign) to binary (pathogenic vs benign)
+    for fair comparison with tools that only predict binary.
+  - **load_dbnsfp_scores()** — loads precomputed predictor scores from
+    dbNSFP TSV/CSV files, coerces non-numeric values to NaN, optionally
+    filters by variant ID.
+  - **evaluate_external_tool()** — evaluates a single external predictor:
+    applies threshold, handles missing scores, computes accuracy, F1,
+    AUROC, PR-AUC.
+  - **compare_external_tools()** — runs all 4 external tools plus our
+    model (binary and 4-class) and returns a comparison DataFrame.
+  - **run_external_comparison()** — full pipeline: load scores → evaluate
+    all tools → save `results/tables/external_comparison.csv`.
+
+- `scripts/evaluate.py` — **Full evaluation entry point**:
   - Loads checkpoint + config, sets up DataModule, runs inference on test set.
   - Computes all metrics + bootstrap CIs + baseline comparison + biological
-    validation.
+    validation + external tool comparison.
   - Saves results to `results/tables/` as JSON and CSV:
     test_metrics.json, confidence_intervals.csv, confusion_matrix.csv,
     classification_report.csv, baseline_comparison.csv,
-    biological_validation.json.
+    biological_validation.json, external_comparison.csv.
   - Prints formatted summary with CIs to console.
   - CLI flags: --skip-baselines, --skip-bootstrap, --n-bootstrap,
-    --cosmic-path, --output-dir.
+    --cosmic-path, --output-dir, --dbnsfp-path, --skip-external.
 
-- `src/evaluation/__init__.py` — exports all public evaluation functions.
+- `src/evaluation/__init__.py` — exports all public evaluation functions
+  including `run_external_comparison` and `compare_external_tools`.
 
-- `tests/test_metrics.py` — **39 new tests** covering:
+- `tests/test_metrics.py` — **39 tests** covering:
   - compute_all_metrics: accuracy/F1/precision/recall/MCC/ROC-AUC/kappa
     all verified against sklearn on known inputs, per-class keys present,
     top-k keys present, ECE/PR-AUC present and bounded.
@@ -1160,7 +1200,7 @@ everything together for publication-ready results.
   - Bootstrap CI: returns dict, tuples ordered, lower<=upper, point
     estimate in range, reproducible with seed, key metrics present.
 
-- `tests/test_biological_validation.py` — **28 new tests** covering:
+- `tests/test_biological_validation.py` — **28 tests** covering:
   - COSMIC genes: >500 genes, known cancer genes present, frozenset type.
   - Review star mapping: all star levels mapped correctly.
   - Driver predictions: counts, accuracy, pathogenic recall, benign recall.
@@ -1171,25 +1211,59 @@ everything together for publication-ready results.
   - Driver classification report: P/R/F1 in range, NaN for no drivers.
   - Full validation: expected sections present, ClinVar section conditional.
 
+- `tests/test_external_tools.py` — **34 new tests** (**added 2026-06-26**) covering:
+  - map_to_binary: classes 0/1→1, classes 2/3→0, all four classes, int type.
+  - _apply_threshold: "above" and "below" directions, binary output only.
+  - _pr_auc_binary: positive value, high for perfect, NaN for single class.
+  - _compute_binary_metrics: dict output, accuracy correct, with/without
+    continuous scores for AUROC/PR-AUC.
+  - evaluate_external_tool: tool name in output, scored/missing counts,
+    all-NaN handling, accuracy in [0,1].
+  - EXTERNAL_THRESHOLDS: 4 tools defined, expected tools present, required
+    keys (column/threshold/direction) present, SIFT/REVEL thresholds correct.
+  - compare_external_tools: returns DataFrame, has "Our Model (binary)" and
+    "Our Model (4-class)" rows, has external tools, metric columns present,
+    missing column skips tool gracefully.
+  - load_dbnsfp_scores: loads CSV and TSV, filters by variant_ids, coerces
+    non-numeric values to NaN.
+  - run_external_comparison: saves external_comparison.csv, works without
+    output_dir.
+
+- `tests/test_benchmarks.py` — **17 new tests** (**added 2026-06-26**) covering:
+  - _build_baselines: returns list, LR/RF/MLP present, all have
+    fit/predict/predict_proba.
+  - _fit_and_evaluate: returns dict with model name, CV scores, accuracy.
+  - run_baselines: returns DataFrame, ≥3 rows, has model column, sorted by
+    accuracy descending, includes our model when provided, metric columns
+    present, accuracy in [0,1], works without our model.
+
 **Commands run this session (and what they did):**
 ```powershell
-# Installed evaluation dependencies:
+# Installed evaluation dependencies (first pass, 2026-06-23):
 pip install scikit-learn xgboost lightgbm    # → installed
 
-# Ran all 67 new evaluation tests:
+# Ran all 67 new evaluation tests (first pass):
 python -m pytest tests/test_metrics.py tests/test_biological_validation.py -v
 # → 67 passed in ~31 seconds
 
-# Ran the full test suite (all modules):
+# Ran the full test suite (first pass):
 python -m pytest tests/ -v                   # → 404 passed in ~73 seconds
+
+# Added external_tools + benchmark tests, fixed deprecations (2026-06-26):
+python -m pytest tests/test_external_tools.py tests/test_benchmarks.py -v
+# → 51 passed in ~220 seconds
+
+# Ran the full test suite after all additions:
+python -m pytest tests/ -v                   # → 639 passed in ~353 seconds
 ```
 
 > ℹ️ **New dependencies installed:** `scikit-learn`, `xgboost`, `lightgbm`,
 > `scipy` — all already listed in `requirements.txt` from Session 1.
 
-**Status:** ✅ Done and verified — all 404 tests pass; the evaluation
+**Status:** ✅ Done and verified — all 639 tests pass; the evaluation
 pipeline works end-to-end with comprehensive metrics, baseline comparisons,
-biological validation, and bootstrap confidence intervals.
+biological validation, external tool comparison (SIFT, PolyPhen-2, CADD,
+REVEL), and bootstrap confidence intervals.
 
 **What's next (Session 12):** Build `src/explainability/` — SHAP values,
 LIME explanations, and attention weight visualisation for interpreting the
