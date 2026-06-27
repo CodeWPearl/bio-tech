@@ -12,6 +12,12 @@ import streamlit as st
 from webapp.utils.api_client import APIClient
 from webapp.utils.styling import get_class_color, styled_metric_card
 
+PLOTLY_DARK = dict(
+    plot_bgcolor="rgba(0,0,0,0)",
+    paper_bgcolor="rgba(0,0,0,0)",
+    font_color="#CBD5E1",
+    font_family="Inter, sans-serif",
+)
 
 REQUIRED_COLUMNS = [
     "gene_symbol",
@@ -44,7 +50,6 @@ def _parse_upload(uploaded_file: object) -> pd.DataFrame | None:
         if missing:
             st.error(f"Missing required columns: {', '.join(missing)}")
             return None
-
         return df
     except Exception as exc:
         st.error(f"Failed to parse file: {exc}")
@@ -97,7 +102,7 @@ def render(client: APIClient) -> None:
     st.markdown(
         """
         <div class="dashboard-header">
-            <h1>Batch Variant Analysis</h1>
+            <h1>\U0001f4ca Batch Variant Analysis</h1>
             <p>Upload a CSV/TSV file with multiple variants for high-throughput
             pathogenicity screening</p>
         </div>
@@ -113,9 +118,9 @@ def render(client: APIClient) -> None:
             help=f"Required columns: {', '.join(REQUIRED_COLUMNS)}",
         )
     with col_sample:
-        st.markdown("**Sample Format**")
+        st.markdown("<br>", unsafe_allow_html=True)
         st.download_button(
-            "Download Sample CSV",
+            "\U0001f4e5  Sample CSV",
             data=SAMPLE_DATA,
             file_name="sample_variants.csv",
             mime="text/csv",
@@ -123,10 +128,21 @@ def render(client: APIClient) -> None:
         )
 
     if uploaded_file is None:
-        st.info(
-            "Upload a CSV or TSV file with columns: "
-            f"`{', '.join(REQUIRED_COLUMNS)}`. "
-            "Optional: `protein_change`, `cancer_type`."
+        st.markdown(
+            f"""
+            <div class="glass-card" style="text-align:center;padding:3rem">
+                <div style="font-size:3rem;opacity:0.5;margin-bottom:1rem">\U0001f4c1</div>
+                <p style="color:#94A3B8 !important;font-size:1rem">
+                    Upload a CSV or TSV file with columns:<br>
+                    <code style="color:#A5B4FC">{', '.join(REQUIRED_COLUMNS)}</code>
+                </p>
+                <p style="color:#64748B !important;font-size:0.85rem">
+                    Optional: <code style="color:#A5B4FC">protein_change</code>,
+                    <code style="color:#A5B4FC">cancer_type</code>
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
         return
 
@@ -142,9 +158,8 @@ def render(client: APIClient) -> None:
         st.warning("Batch limit is 100 variants. Only the first 100 will be processed.")
         df = df.head(100)
 
-    if st.button("Run Batch Analysis", type="primary", use_container_width=True):
+    if st.button("\U0001f680  Run Batch Analysis", type="primary", use_container_width=True):
         requests = _df_to_requests(df)
-
         progress_bar = st.progress(0, text="Submitting batch request...")
         progress_bar.progress(10, text="Processing variants...")
 
@@ -183,31 +198,21 @@ def render(client: APIClient) -> None:
     low_conf = len([p for p in predictions if p.get("confidence", 0) < 0.6])
 
     with s_cols[0]:
-        st.markdown(styled_metric_card("Total Variants", str(total)), unsafe_allow_html=True)
+        st.markdown(styled_metric_card("Total", str(total), icon="\U0001f4cb", accent="#6366F1"), unsafe_allow_html=True)
     with s_cols[1]:
-        st.markdown(styled_metric_card("Pathogenic", str(pathogenic_count)), unsafe_allow_html=True)
+        st.markdown(styled_metric_card("Pathogenic", str(pathogenic_count), icon="⚠️", accent="#EF4444"), unsafe_allow_html=True)
     with s_cols[2]:
-        st.markdown(styled_metric_card("Benign", str(benign_count)), unsafe_allow_html=True)
+        st.markdown(styled_metric_card("Benign", str(benign_count), icon="✅", accent="#10B981"), unsafe_allow_html=True)
     with s_cols[3]:
-        st.markdown(styled_metric_card("Avg Confidence", f"{avg_conf * 100:.1f}%"), unsafe_allow_html=True)
+        st.markdown(styled_metric_card("Avg Conf", f"{avg_conf * 100:.1f}%", icon="\U0001f3af", accent="#8B5CF6"), unsafe_allow_html=True)
     with s_cols[4]:
-        st.markdown(styled_metric_card("Low Confidence", str(low_conf)), unsafe_allow_html=True)
+        st.markdown(styled_metric_card("Low Conf", str(low_conf), icon="⚡", accent="#F59E0B"), unsafe_allow_html=True)
 
     st.markdown("---")
-
     st.subheader("Results Table")
-    st.dataframe(
-        results_df.style.applymap(
-            lambda v: f"background-color: {get_class_color(v)}22; color: {get_class_color(v)}"
-            if v in get_class_color.__code__.co_consts else "",
-            subset=["predicted_class"] if "predicted_class" in results_df.columns else [],
-        ),
-        use_container_width=True,
-        height=400,
-    )
+    st.dataframe(results_df, use_container_width=True, height=400)
 
     chart_cols = st.columns(2)
-
     with chart_cols[0]:
         st.markdown("#### Class Distribution")
         if class_counts:
@@ -215,30 +220,27 @@ def render(client: APIClient) -> None:
                 labels=list(class_counts.keys()),
                 values=list(class_counts.values()),
                 marker_colors=[get_class_color(c) for c in class_counts],
-                hole=0.4,
+                hole=0.5,
                 textinfo="label+value+percent",
+                textfont=dict(size=11),
             ))
-            fig_pie.update_layout(
-                height=350,
-                margin=dict(l=10, r=10, t=10, b=10),
-            )
+            fig_pie.update_layout(height=350, margin=dict(l=10, r=10, t=10, b=10), **PLOTLY_DARK)
             st.plotly_chart(fig_pie, use_container_width=True)
 
     with chart_cols[1]:
         st.markdown("#### Confidence Distribution")
         if "confidence" in results_df.columns:
             fig_hist = px.histogram(
-                results_df,
-                x="confidence",
-                nbins=20,
-                color_discrete_sequence=["#1B6EC2"],
+                results_df, x="confidence", nbins=20,
+                color_discrete_sequence=["#6366F1"],
                 labels={"confidence": "Confidence Score"},
             )
             fig_hist.update_layout(
-                height=350,
-                margin=dict(l=10, r=10, t=10, b=30),
-                plot_bgcolor="white",
+                height=350, margin=dict(l=10, r=10, t=10, b=30),
                 yaxis_title="Count",
+                xaxis=dict(gridcolor="rgba(99,102,241,0.1)"),
+                yaxis=dict(gridcolor="rgba(99,102,241,0.1)"),
+                **PLOTLY_DARK,
             )
             st.plotly_chart(fig_hist, use_container_width=True)
 
@@ -250,18 +252,11 @@ def render(client: APIClient) -> None:
         ).sort_values("count", ascending=False).head(20).reset_index()
 
         fig_gene = px.bar(
-            gene_summary,
-            x="gene_symbol",
-            y="count",
-            color="avg_confidence",
-            color_continuous_scale="RdYlGn",
-            labels={"gene_symbol": "Gene", "count": "Variant Count", "avg_confidence": "Avg Confidence"},
+            gene_summary, x="gene_symbol", y="count", color="avg_confidence",
+            color_continuous_scale="Purples",
+            labels={"gene_symbol": "Gene", "count": "Count", "avg_confidence": "Avg Conf"},
         )
-        fig_gene.update_layout(
-            height=350,
-            margin=dict(l=10, r=10, t=10, b=30),
-            plot_bgcolor="white",
-        )
+        fig_gene.update_layout(height=350, margin=dict(l=10, r=10, t=10, b=30), **PLOTLY_DARK)
         st.plotly_chart(fig_gene, use_container_width=True)
 
     st.markdown("---")
@@ -269,11 +264,8 @@ def render(client: APIClient) -> None:
     with dl_cols[0]:
         csv_data = results_df.to_csv(index=False)
         st.download_button(
-            "Download Results (CSV)",
-            data=csv_data,
-            file_name="batch_results.csv",
-            mime="text/csv",
-            use_container_width=True,
+            "\U0001f4e5  Download Results (CSV)", data=csv_data,
+            file_name="batch_results.csv", mime="text/csv", use_container_width=True,
         )
     with dl_cols[1]:
         try:
@@ -281,15 +273,10 @@ def render(client: APIClient) -> None:
             with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
                 results_df.to_excel(writer, sheet_name="Predictions", index=False)
                 if "batch_df" in st.session_state:
-                    st.session_state["batch_df"].to_excel(
-                        writer, sheet_name="Input Data", index=False,
-                    )
-                pd.DataFrame([summary]).to_excel(
-                    writer, sheet_name="Summary", index=False,
-                )
+                    st.session_state["batch_df"].to_excel(writer, sheet_name="Input Data", index=False)
+                pd.DataFrame([summary]).to_excel(writer, sheet_name="Summary", index=False)
             st.download_button(
-                "Download Full Report (Excel)",
-                data=excel_buffer.getvalue(),
+                "\U0001f4e5  Download Report (Excel)", data=excel_buffer.getvalue(),
                 file_name="batch_report.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
