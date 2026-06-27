@@ -333,6 +333,13 @@ dashboard has 6 pages covering all requirements: home, single prediction with
 full results panel, batch analysis with charts and exports, model performance
 with curves and comparisons, data explorer with gene search, and about page.
 
+**Post-verification fix:** Renamed `webapp/pages/` to `webapp/views/` to prevent
+Streamlit's automatic multipage discovery from creating a conflicting navigation.
+Overhauled the UI from a plain white theme to a modern dark glassmorphism design
+(deep navy/purple background, frosted glass cards, gradient headers, Plotly dark
+charts, animated badges). Made API calls silent when the backend is offline to
+prevent red error boxes on every page load.
+
 **What's next (Session 21):** Build the remaining Streamlit pages (batch
 analysis enhancements, additional model performance visualizations) and
 integration testing with the live FastAPI backend.
