@@ -17,8 +17,9 @@ multi-omics integration. Target: IEEE/Springer/Nature journal submission.
 - Train: `python scripts/train.py --config configs/default.yaml`
 - Evaluate: `python scripts/evaluate.py --checkpoint results/best_model.ckpt`
 - Test: `pytest tests/ -v --tb=short`
-- Lint: `ruff check src/ scripts/ && mypy src/ --ignore-missing-imports`
-- Format: `ruff format src/ scripts/`
+- Lint: `ruff check src/ scripts/ api/ && mypy src/ --ignore-missing-imports`
+- Format: `ruff format src/ scripts/ api/`
+- API: `uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload`
 
 ## Code Standards
 - Type hints on ALL function signatures (parameters + return)
@@ -38,6 +39,18 @@ multi-omics integration. Target: IEEE/Springer/Nature journal submission.
 - Model encoders: each modality encoder in src/models/encoders/
 - Fusion strategies: src/models/fusion/
 - Every experiment must be reproducible (seed, config logged to MLflow)
+
+## REST API (api/)
+- FastAPI application in api/main.py with lifespan-based startup
+- Pydantic schemas in api/schemas.py for request/response validation
+- Route modules: api/routes/predict.py, explore.py, explain.py
+- Service layer: api/services/model_service.py (singleton, thread-safe),
+  api/services/feature_service.py (feature extraction from requests)
+- Endpoints: /health, /version, /predict, /predict/batch, /genes,
+  /genes/{symbol}, /stats, /model/info, /explain/shap, /explain/attention,
+  /explain/global
+- CORS enabled for all origins (research demo)
+- Tests in tests/test_api.py (29 tests using mocked services)
 
 ## Data Sources (ALL FREE, NO AUTHENTICATION WALLS)
 - **ClinVar** (pathogenicity labels): FTP download, VCF + TSV, public domain
