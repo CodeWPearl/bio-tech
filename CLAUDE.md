@@ -82,7 +82,8 @@ multi-omics integration. Target: IEEE/Springer/Nature journal submission.
 ## Streamlit Dashboard (webapp/)
 - Entry point: `streamlit run webapp/app.py` (port 8501)
 - Communicates with FastAPI backend via HTTP (API_URL env var, default localhost:8000)
-- Pages: home, single_prediction, batch_analysis, model_performance, data_explorer, about
+- Views: webapp/views/ (home, single_prediction, batch_analysis, model_performance, data_explorer, about)
+  Note: directory is "views" not "pages" to prevent Streamlit multipage auto-discovery
 - Shared utilities: webapp/utils/api_client.py (APIClient class), webapp/utils/styling.py
 - Dependencies: streamlit, plotly, requests, reportlab (PDF), openpyxl (Excel)
 - Single prediction page is the core feature: input form + results panel with
