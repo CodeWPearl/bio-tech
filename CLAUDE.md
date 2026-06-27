@@ -20,6 +20,7 @@ multi-omics integration. Target: IEEE/Springer/Nature journal submission.
 - Lint: `ruff check src/ scripts/ api/ && mypy src/ --ignore-missing-imports`
 - Format: `ruff format src/ scripts/ api/`
 - API: `uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload`
+- Dashboard: `streamlit run webapp/app.py` (requires API running on port 8000)
 
 ## Code Standards
 - Type hints on ALL function signatures (parameters + return)
@@ -77,6 +78,15 @@ multi-omics integration. Target: IEEE/Springer/Nature journal submission.
 - Use pytest fixtures in tests/conftest.py for shared test data
 - Test with small synthetic data — never require full dataset downloads
 - Minimum: test input/output shapes, edge cases, missing data handling
+
+## Streamlit Dashboard (webapp/)
+- Entry point: `streamlit run webapp/app.py` (port 8501)
+- Communicates with FastAPI backend via HTTP (API_URL env var, default localhost:8000)
+- Pages: home, single_prediction, batch_analysis, model_performance, data_explorer, about
+- Shared utilities: webapp/utils/api_client.py (APIClient class), webapp/utils/styling.py
+- Dependencies: streamlit, plotly, requests, reportlab (PDF), openpyxl (Excel)
+- Single prediction page is the core feature: input form + results panel with
+  prediction card, class probabilities, uncertainty, explanations, biological context, exports
 
 ## Git Conventions
 - Conventional commits: feat:, fix:, refactor:, docs:, test:, data:
