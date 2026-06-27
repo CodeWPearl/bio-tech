@@ -210,6 +210,135 @@ git commit -m "message"   # save a snapshot with a short description
 > what to do next. **Newest at the top.** This section is updated at the end of
 > every session.
 
+### Session 20 — Streamlit Web Dashboard — *2026-06-27*
+
+**Goal:** Build a full Streamlit web dashboard that communicates with the
+FastAPI backend (Session 19) via HTTP, providing an interactive UI for
+single variant prediction, batch analysis, model performance visualization,
+data exploration, and project information.
+
+**Plain-English background (what the new words mean):**
+- **Streamlit** — a Python framework for building web apps with minimal code.
+  You write Python, and Streamlit turns it into an interactive web page with
+  buttons, inputs, charts, and tables.
+- **Dashboard** — a web page that shows information at a glance: metrics in
+  cards, interactive charts, and forms for user input.
+- **Plotly** — a charting library that creates interactive charts you can
+  hover over, zoom, and pan. Used for bar charts, pie/donut charts, heatmaps,
+  and histograms in the dashboard.
+- **API Client** — a helper class that sends HTTP requests from the Streamlit
+  frontend to the FastAPI backend. It's the bridge between the UI and the
+  model.
+- **PDF Report** — the dashboard can generate a downloadable PDF document
+  summarizing a prediction result, using the `reportlab` library.
+
+**What was created:**
+
+- `webapp/app.py` — **Main Streamlit entry point**:
+  - `st.set_page_config` with page title, DNA emoji icon, wide layout
+  - Custom CSS for professional styling (white/gray/blue color scheme,
+    rounded cards, gradient sidebar)
+  - Sidebar navigation with 6 pages: Home, Single Prediction, Batch
+    Analysis, Model Performance, Data Explorer, About
+  - API health status indicator in sidebar
+  - Configurable API URL via `API_URL` environment variable
+
+- `webapp/utils/api_client.py` — **APIClient class**:
+  - HTTP methods: `predict()`, `predict_batch()`, `get_genes()`,
+    `get_stats()`, `get_model_info()`, `get_gene_info()`, `health_check()`
+  - `@st.cache_data` on read-only endpoints (5-minute TTL)
+  - Timeout handling (30s single, 120s batch)
+  - User-friendly error messages for connection/timeout/HTTP errors
+
+- `webapp/utils/styling.py` — **CSS and styling helpers**:
+  - `get_class_color()` — maps pathogenicity classes to colors
+  - `get_confidence_color()` — green/yellow/red by confidence threshold
+  - `styled_metric_card()` — reusable HTML card for metrics
+  - `get_custom_css()` — full dashboard CSS (sidebar, cards, buttons, tabs)
+
+- `webapp/pages/home.py` — **Landing page**:
+  - Project title/description in gradient header
+  - Key statistics cards (training variants, architecture, fusion, parameters)
+  - Quick-start guide explaining all 4 main features
+  - Architecture diagram (loads from results/figures/ if available)
+  - Research abstract
+
+- `webapp/pages/single_prediction.py` — **Core prediction page**:
+  - Input form (40% width): gene symbol with suggestions, mutation type
+    selectbox, chromosome, position, alleles with validation, protein
+    change, cancer type, explanation/uncertainty toggles
+  - Results panel (60% width):
+    - Prediction card: class badge (color-coded), confidence bar, recommendation
+    - Class probabilities: horizontal bar chart (Plotly)
+    - Uncertainty panel: epistemic gauge, entropy, calibration indicator
+    - Explanation panel: modality contributions donut chart, feature importance
+      bars (positive green/negative red), cross-attention heatmap
+    - Biological context: cancer driver status, COSMIC info, ClinVar count,
+      links to ClinVar/COSMIC/UniProt
+    - Export: PDF report download + JSON download
+
+- `webapp/pages/batch_analysis.py` — **Batch prediction page**:
+  - CSV/TSV file upload with format validation
+  - Data preview (first 10 rows)
+  - Progress bar during batch processing
+  - Summary cards (total, pathogenic, benign, avg confidence, low-confidence)
+  - Interactive results table
+  - Class distribution pie chart + confidence histogram + gene-level bar chart
+  - Downloads: CSV results + Excel multi-sheet report
+
+- `webapp/pages/model_performance.py` — **Model performance dashboard**:
+  - Key metrics cards (Accuracy, F1-Macro, AUROC, PR-AUC, MCC with 95% CI)
+  - Tabbed evaluation curves (ROC, PR, confusion matrix, learning curves)
+  - Baseline comparison (LR, RF, XGBoost, LightGBM, MLP vs ours)
+  - Ablation study chart
+  - Fusion strategy comparison chart
+  - Calibration plot (before/after temperature scaling)
+  - Uncertainty distribution (correct vs incorrect predictions)
+  - Model architecture info cards
+
+- `webapp/pages/data_explorer.py` — **Interactive data explorer**:
+  - Dataset overview cards (total variants, gene count, cancer types, classes)
+  - Class distribution pie chart + cancer types list
+  - Gene search with detailed gene info cards
+  - Top genes by variant count bar chart
+  - Gene browser (all genes, cancer drivers marked)
+
+- `webapp/pages/about.py` — **Project information page**:
+  - Project overview and architecture description
+  - Data sources table
+  - Technology stack
+  - API endpoints reference table
+  - Getting started instructions
+  - Live API health status
+
+**Commands run this session (and what they did):**
+```powershell
+# Installed required packages:
+pip install streamlit plotly requests reportlab openpyxl
+
+# Verified all Python files parse correctly:
+python -c "import ast; ..."   # → Checked 12 files, all OK
+
+# Verified webapp modules import:
+python -c "from webapp.utils.api_client import APIClient; ..."   # → All imports OK
+
+# Launched Streamlit app:
+python -m streamlit run webapp/app.py --server.headless true
+# → Running at http://localhost:8501
+```
+
+**Status:** ✅ Complete. All 12 webapp files created, syntax-checked, imports
+verified, Streamlit app launches successfully at http://localhost:8501. The
+dashboard has 6 pages covering all requirements: home, single prediction with
+full results panel, batch analysis with charts and exports, model performance
+with curves and comparisons, data explorer with gene search, and about page.
+
+**What's next (Session 21):** Build the remaining Streamlit pages (batch
+analysis enhancements, additional model performance visualizations) and
+integration testing with the live FastAPI backend.
+
+---
+
 ### Session 19 — Production REST API (FastAPI) — *2026-06-27*
 
 **Goal:** Build a production-ready REST API using FastAPI that wraps the
