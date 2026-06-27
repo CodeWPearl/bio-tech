@@ -210,6 +210,150 @@ git commit -m "message"   # save a snapshot with a short description
 > what to do next. **Newest at the top.** This section is updated at the end of
 > every session.
 
+### Session 19 — Production REST API (FastAPI) — *2026-06-27*
+
+**Goal:** Build a production-ready REST API using FastAPI that wraps the
+trained pathogenicity prediction model, providing single and batch variant
+prediction, uncertainty estimation, SHAP-based explanations, data exploration
+endpoints, and comprehensive input validation.
+
+**Plain-English background (what the new words mean):**
+- **REST API** — a way for other programs (web apps, scripts, mobile apps)
+  to talk to our model over HTTP. Instead of running a Python script, any
+  program anywhere can send a request to a URL and get back a JSON prediction.
+- **FastAPI** — a modern Python web framework for building APIs. It's fast
+  (async), auto-generates documentation (Swagger UI at `/docs`), and uses
+  Pydantic for input/output validation.
+- **Pydantic** — a data validation library. We define the exact shape of
+  requests and responses as Python classes, and Pydantic automatically
+  rejects malformed input with clear error messages.
+- **Endpoint** — a specific URL that does a specific thing. For example,
+  `POST /predict` accepts a variant and returns a prediction.
+- **Singleton pattern** — ensuring only one copy of the model exists in
+  memory, shared across all API requests. Loading a 500K-parameter model
+  per request would be wasteful.
+- **asyncio lock** — a thread-safety mechanism ensuring only one prediction
+  runs at a time on the GPU, preventing memory corruption.
+- **CORS middleware** — allows web browsers to call our API from any domain.
+  Required for web-based research demos.
+- **Lifespan** — FastAPI's startup/shutdown lifecycle. On startup: load model
+  checkpoint, initialize services. On shutdown: clean up resources.
+- **TestClient** — FastAPI's built-in testing tool that simulates HTTP
+  requests without starting a real server.
+
+**What was created:**
+
+- `api/schemas.py` — **Pydantic request/response models**:
+  - `PredictionRequest` — gene_symbol, mutation_type, chromosome,
+    start_position, reference/variant alleles, optional protein_change
+    and cancer_type, flags for uncertainty and explanation
+  - `PredictionResponse` — variant_id, predicted_class, confidence,
+    class_probabilities, uncertainty, explanation, biological_context,
+    recommendation
+  - `BatchPredictionRequest/Response` — up to 100 variants with summary
+  - `UncertaintyResult` — epistemic_uncertainty, predictive_entropy,
+    calibrated flag, confidence_level (High/Medium/Low)
+  - `ExplanationResult` — top positive/negative features, modality
+    contributions, attention weights
+  - `BiologicalContext` — gene info, cancer driver status, COSMIC/ClinVar
+  - `HealthResponse`, `GeneInfo`, `DatasetStats`, `ModelInfo`,
+    `SHAPRequest`, `AttentionRequest`
+
+- `api/services/model_service.py` — **ModelService singleton**:
+  - Singleton pattern with `__new__` override
+  - `load_model(checkpoint, config)` — loads weights, initializes MC
+    Dropout predictor and SHAP explainer
+  - `predict(batch)` — thread-safe forward pass with asyncio lock
+  - `predict_with_uncertainty(batch)` — MC Dropout inference
+  - `explain(batch)` — SHAP local explanation
+  - `load_calibration(temperature)` — temperature scaling
+  - `get_model_info()` — parameter counts per component
+  - `get_recommendation()` — confidence/uncertainty-based clinical advice
+  - GPU/CPU device management
+  - `reset()` class method for testing
+
+- `api/services/feature_service.py` — **FeatureService class**:
+  - `extract_features(request)` — converts API request to model tensors
+  - Manual feature encoding: mutation type one-hot, chromosome encoding,
+    nucleotide one-hot, log-normalized position
+  - Optional sklearn pipeline loading from pickle
+  - `get_biological_context()` — gene annotation lookup
+  - Built-in set of ~50 known cancer driver genes
+
+- `api/routes/predict.py` — **Prediction endpoints**:
+  - `POST /predict` — single variant with uncertainty + explanation
+  - `POST /predict/batch` — batch of up to 100 variants with summary stats
+  - Deterministic variant ID generation (gene_chr_pos_hash)
+
+- `api/routes/explore.py` — **Data exploration endpoints**:
+  - `GET /genes` — list all genes with variant counts
+  - `GET /genes/{gene_symbol}` — gene-level info with class distribution
+  - `GET /stats` — dataset statistics (total variants, class dist, top genes)
+  - `GET /model/info` — architecture summary, parameter counts
+
+- `api/routes/explain.py` — **Explanation endpoints**:
+  - `POST /explain/shap` — SHAP values for a specific prediction
+  - `POST /explain/attention` — attention weight visualization data
+  - `GET /explain/global` — precomputed global feature importance
+
+- `api/main.py` — **FastAPI application**:
+  - Lifespan-based startup: loads model, calibration, feature pipeline
+  - CORS middleware (all origins for research demo)
+  - `GET /health` — health check with model status
+  - `GET /version` — API version info
+  - Includes all route modules
+
+- `tests/test_api.py` — **29 tests** covering:
+  - Health check: returns 200, correct fields, version endpoint
+  - Single prediction: valid input, response schema, values in range,
+    with/without uncertainty, with/without explanation, biological context,
+    minimal input
+  - Batch prediction: multiple variants, response structure, single variant
+  - Input validation: missing fields (422), invalid chromosome (422),
+    invalid allele (422), batch exceeds 100 (422), empty body (422)
+  - Exploration: list genes, get gene info, unknown gene (404), stats
+  - Explanation: global endpoint
+  - Schema compliance: PredictionResponse, HealthResponse,
+    BatchPredictionResponse all parse correctly
+
+**Commands run this session (and what they did):**
+```powershell
+# Installed API dependencies:
+pip install fastapi uvicorn httpx   # → installed fastapi 0.138.1, uvicorn 0.49.0
+
+# Ran all 29 API tests:
+python -m pytest tests/test_api.py -v   # → 29 passed in ~10s
+
+# To start the API server:
+uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+# → API available at http://localhost:8000
+# → Swagger docs at http://localhost:8000/docs
+```
+
+**Files created this session:**
+| File | Description |
+|------|-------------|
+| `api/schemas.py` | Pydantic request/response models (12 classes) |
+| `api/services/model_service.py` | Singleton model service with GPU/async |
+| `api/services/feature_service.py` | Feature extraction from API requests |
+| `api/services/__init__.py` | Service layer package init |
+| `api/routes/predict.py` | Single + batch prediction endpoints |
+| `api/routes/explore.py` | Gene/stats/model info endpoints |
+| `api/routes/explain.py` | SHAP/attention/global explanation endpoints |
+| `api/routes/__init__.py` | Routes package init |
+| `api/main.py` | FastAPI app with lifespan, CORS, health/version |
+| `tests/test_api.py` | 29 API tests with mocked services |
+
+**Status:** ✅ Done — production-ready FastAPI REST API with 14 endpoints,
+full Pydantic validation, uncertainty estimation, SHAP explanations,
+biological context, singleton model service, and 29 passing tests.
+
+**What's next (Session 20):** Run the full data pipeline (download ClinVar +
+cBioPortal data, merge, split), train the model, and run the complete
+evaluation + ablation + figure generation pipeline to produce real results.
+
+---
+
 ### Session 18 — Research paper scaffold — *2026-06-26*
 
 **Goal:** Create the complete research paper scaffold in `paper/` — a
