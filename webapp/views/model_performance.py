@@ -10,15 +10,9 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from webapp.utils.api_client import APIClient
-from webapp.utils.styling import styled_metric_card
+from webapp.utils.styling import PLOTLY_LIGHT, styled_metric_card
 
-PLOTLY_DARK = dict(
-    plot_bgcolor="rgba(0,0,0,0)",
-    paper_bgcolor="rgba(0,0,0,0)",
-    font_color="#CBD5E1",
-    font_family="Inter, sans-serif",
-)
-GRID = dict(gridcolor="rgba(99,102,241,0.08)")
+GRID = dict(gridcolor="#E2E8F0")
 
 
 def _load_figure(filename: str) -> Path | None:
@@ -45,8 +39,8 @@ def render(client: APIClient) -> None:
     # --- Key Metrics Cards ---
     m_cols = st.columns(5)
     metrics = [
-        ("Accuracy", "0.912", "95% CI: [0.89, 0.93]", "\U0001f3af", "#6366F1"),
-        ("F1-Macro", "0.887", "95% CI: [0.86, 0.91]", "⚡", "#8B5CF6"),
+        ("Accuracy", "0.912", "95% CI: [0.89, 0.93]", "\U0001f3af", "#4F46E5"),
+        ("F1-Macro", "0.887", "95% CI: [0.86, 0.91]", "⚡", "#7C3AED"),
         ("AUROC", "0.968", "95% CI: [0.95, 0.98]", "\U0001f4c8", "#EC4899"),
         ("PR-AUC", "0.943", "95% CI: [0.92, 0.96]", "\U0001f4ca", "#F59E0B"),
         ("MCC", "0.871", "95% CI: [0.84, 0.90]", "\U0001f9ee", "#10B981"),
@@ -80,7 +74,7 @@ def render(client: APIClient) -> None:
             fig_roc = go.Figure()
             fig_roc.add_trace(go.Scatter(
                 x=[0, 1], y=[0, 1], mode="lines", name="Random",
-                line=dict(dash="dash", color="#64748B"),
+                line=dict(dash="dash", color="#94A3B8"),
             ))
             for cls, color, auroc in zip(classes, colors, aurocs):
                 n = 200
@@ -97,7 +91,7 @@ def render(client: APIClient) -> None:
                 height=450, margin=dict(l=10, r=10, t=30, b=30),
                 xaxis=dict(**GRID), yaxis=dict(**GRID),
                 legend=dict(x=0.55, y=0.05),
-                **PLOTLY_DARK,
+                **PLOTLY_LIGHT,
             )
             st.plotly_chart(fig_roc, use_container_width=True)
 
@@ -128,7 +122,7 @@ def render(client: APIClient) -> None:
                 height=450, margin=dict(l=10, r=10, t=30, b=30),
                 xaxis=dict(**GRID), yaxis=dict(**GRID),
                 legend=dict(x=0.05, y=0.05),
-                **PLOTLY_DARK,
+                **PLOTLY_LIGHT,
             )
             st.plotly_chart(fig_pr, use_container_width=True)
 
@@ -150,7 +144,7 @@ def render(client: APIClient) -> None:
                 xaxis_title="Predicted", yaxis_title="Actual",
                 height=450, margin=dict(l=10, r=10, t=30, b=30),
                 yaxis=dict(autorange="reversed"),
-                **PLOTLY_DARK,
+                **PLOTLY_LIGHT,
             )
             st.plotly_chart(fig_cm, use_container_width=True)
 
@@ -180,7 +174,7 @@ def render(client: APIClient) -> None:
                 fig_loss = go.Figure()
                 fig_loss.add_trace(go.Scatter(
                     x=epochs, y=train_loss, mode="lines", name="Train Loss",
-                    line=dict(color="#6366F1", width=2),
+                    line=dict(color="#4F46E5", width=2),
                 ))
                 fig_loss.add_trace(go.Scatter(
                     x=epochs, y=val_loss, mode="lines", name="Val Loss",
@@ -191,7 +185,7 @@ def render(client: APIClient) -> None:
                     height=350, margin=dict(l=10, r=10, t=10, b=30),
                     xaxis=dict(**GRID), yaxis=dict(**GRID),
                     legend=dict(x=0.6, y=0.95),
-                    **PLOTLY_DARK,
+                    **PLOTLY_LIGHT,
                 )
                 st.plotly_chart(fig_loss, use_container_width=True)
 
@@ -213,7 +207,7 @@ def render(client: APIClient) -> None:
                     height=350, margin=dict(l=10, r=10, t=10, b=30),
                     xaxis=dict(**GRID), yaxis=dict(**GRID),
                     legend=dict(x=0.6, y=0.05),
-                    **PLOTLY_DARK,
+                    **PLOTLY_LIGHT,
                 )
                 st.plotly_chart(fig_auroc, use_container_width=True)
 
@@ -236,7 +230,7 @@ def render(client: APIClient) -> None:
     if comp_path:
         st.image(str(comp_path), use_container_width=True)
     else:
-        bar_colors = ["#6366F1", "#8B5CF6", "#EC4899", "#F59E0B"]
+        bar_colors = ["#4F46E5", "#7C3AED", "#EC4899", "#F59E0B"]
         fig_comp = go.Figure()
         for metric, color in zip(
             ["Accuracy", "F1-Macro", "AUROC", "MCC"], bar_colors
@@ -253,7 +247,7 @@ def render(client: APIClient) -> None:
             legend=dict(orientation="h", yanchor="bottom", y=1.02),
             yaxis=dict(range=[0.6, 1.0], title="Score", **GRID),
             xaxis=dict(**GRID),
-            **PLOTLY_DARK,
+            **PLOTLY_LIGHT,
         )
         st.plotly_chart(fig_comp, use_container_width=True)
 
@@ -264,7 +258,7 @@ def render(client: APIClient) -> None:
             return [""] * len(s)
         is_best = s == s.max()
         return [
-            "font-weight: bold; color: #10B981; background-color: rgba(16,185,129,0.1)"
+            "font-weight: bold; color: #059669; background-color: rgba(16,185,129,0.08)"
             if v else ""
             for v in is_best
         ]
@@ -300,7 +294,7 @@ def render(client: APIClient) -> None:
             fig_abl = go.Figure()
             fig_abl.add_trace(go.Bar(
                 name="AUROC", x=ablation["Configuration"], y=ablation["AUROC"],
-                marker_color="#6366F1",
+                marker_color="#4F46E5",
                 text=[f"{v:.3f}" for v in ablation["AUROC"]],
                 textposition="auto", textfont=dict(color="white"),
             ))
@@ -315,7 +309,7 @@ def render(client: APIClient) -> None:
                 barmode="group", height=380,
                 margin=dict(l=10, r=10, t=30, b=80),
                 yaxis=dict(range=[0.7, 1.0], title="Score", **GRID),
-                **PLOTLY_DARK,
+                **PLOTLY_LIGHT,
             )
             st.plotly_chart(fig_abl, use_container_width=True)
 
@@ -344,7 +338,7 @@ def render(client: APIClient) -> None:
         fig_fusion = go.Figure()
         fig_fusion.add_trace(go.Bar(
             name="AUROC", x=fusion["Strategy"], y=fusion["AUROC"],
-            marker_color="#8B5CF6",
+            marker_color="#7C3AED",
             text=[f"{v:.3f}" for v in fusion["AUROC"]],
             textposition="auto", textfont=dict(color="white"),
         ))
@@ -358,7 +352,7 @@ def render(client: APIClient) -> None:
             barmode="group", height=380,
             margin=dict(l=10, r=10, t=30, b=80),
             yaxis=dict(range=[0.8, 1.0], title="Score", **GRID),
-            **PLOTLY_DARK,
+            **PLOTLY_LIGHT,
         )
         st.plotly_chart(fig_fusion, use_container_width=True)
 
@@ -369,8 +363,8 @@ def render(client: APIClient) -> None:
                 return [""] * len(s)
             is_best = s == s.max()
             return [
-                "font-weight: bold; color: #10B981; "
-                "background-color: rgba(16,185,129,0.1)"
+                "font-weight: bold; color: #059669; "
+                "background-color: rgba(16,185,129,0.08)"
                 if v else ""
                 for v in is_best
             ]
@@ -396,7 +390,7 @@ def render(client: APIClient) -> None:
             fig_cal = go.Figure()
             fig_cal.add_trace(go.Scatter(
                 x=bins, y=bins, mode="lines", name="Perfect",
-                line=dict(dash="dash", color="#64748B"),
+                line=dict(dash="dash", color="#94A3B8"),
             ))
             fig_cal.add_trace(go.Scatter(
                 x=bins, y=before, mode="lines+markers", name="Before Scaling",
@@ -411,7 +405,7 @@ def render(client: APIClient) -> None:
                 yaxis_title="Fraction of Positives",
                 height=400, margin=dict(l=10, r=10, t=30, b=30),
                 xaxis=dict(**GRID), yaxis=dict(**GRID),
-                **PLOTLY_DARK,
+                **PLOTLY_LIGHT,
             )
             st.plotly_chart(fig_cal, use_container_width=True)
 
@@ -451,7 +445,7 @@ def render(client: APIClient) -> None:
             yaxis_title="Count", height=400,
             margin=dict(l=10, r=10, t=30, b=30),
             xaxis=dict(**GRID), yaxis=dict(**GRID),
-            **PLOTLY_DARK,
+            **PLOTLY_LIGHT,
         )
         st.plotly_chart(fig_unc, use_container_width=True)
 
@@ -472,7 +466,7 @@ def render(client: APIClient) -> None:
                 styled_metric_card(
                     "Architecture",
                     model_info.get("architecture", "N/A"),
-                    icon="\U0001f9e0", accent="#6366F1",
+                    icon="\U0001f9e0", accent="#4F46E5",
                 ),
                 unsafe_allow_html=True,
             )
@@ -481,7 +475,7 @@ def render(client: APIClient) -> None:
                 styled_metric_card(
                     "Fusion",
                     model_info.get("fusion_type", "N/A"),
-                    icon="\U0001f517", accent="#8B5CF6",
+                    icon="\U0001f517", accent="#7C3AED",
                 ),
                 unsafe_allow_html=True,
             )
