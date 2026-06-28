@@ -210,6 +210,92 @@ git commit -m "message"   # save a snapshot with a short description
 > what to do next. **Newest at the top.** This section is updated at the end of
 > every session.
 
+### Session 21 — Dashboard Enhancement & API Docs Page — *2026-06-28*
+
+**Goal:** Enhance all Streamlit dashboard pages with additional interactive
+features and create a new API Documentation page, completing the full 7-page
+dashboard.
+
+**What was changed/created:**
+
+- `webapp/views/batch_analysis.py` — **Enhanced**:
+  - Results table now merges input data columns with predictions (all input
+    columns + predicted_class + confidence + uncertainty)
+  - Color-coded rows by predicted class (Pathogenic=red, Benign=green, etc.)
+
+- `webapp/views/model_performance.py` — **Enhanced**:
+  - Interactive Plotly ROC curves with per-class AUROC values (fallback)
+  - Interactive Plotly PR curves with per-class AP values (fallback)
+  - Interactive Plotly confusion matrix heatmap (fallback)
+  - Training History tab: side-by-side loss curves and AUROC over 100 epochs
+  - Baseline Comparison TABLE with best-value highlighting (green bold)
+  - Ablation Study TABLE with delta percentages
+  - Fusion Strategy TABLE with best-value highlighting
+  - ECE metric cards (before/after calibration)
+  - Uncertainty interpretation text
+
+- `webapp/views/data_explorer.py` — **Enhanced**:
+  - Cancer Type Distribution as interactive pie chart (replaced text list)
+  - Gene Statistics Table: sortable table with gene, variant count,
+    pathogenic ratio, cancer driver status
+  - Feature Correlation Explorer: select a modality → see feature importance
+    bar chart (mutation/expression/methylation/CNV/clinical)
+  - SHAP Global Analysis section:
+    - Modality importance donut chart
+    - Top 30 features bar chart
+    - Interactive SHAP dependence plot (select feature → scatter plot)
+
+- `webapp/views/about.py` — **Enhanced**:
+  - Research Motivation section (VUS problem, three gaps addressed)
+  - Architecture diagram (loads PNG or shows ASCII fallback)
+  - Data Sources with links to ClinVar, cBioPortal, COSMIC
+  - Team/Author section (placeholder for paper submission)
+  - Citation section with copyable BibTeX
+  - Links section (Paper PDF, GitHub repo, Swagger UI)
+  - License section (MIT)
+  - Acknowledgments section
+
+- `webapp/views/api_docs.py` — **New page** (API Documentation):
+  - Link to FastAPI Swagger UI and ReDoc
+  - Base URL documentation
+  - 11 endpoints documented with expandable details:
+    GET /health, /version, /genes, /genes/{symbol}, /stats,
+    /model/info, /explain/global
+    POST /predict, /predict/batch, /explain/shap, /explain/attention
+  - Each endpoint has: cURL example, Python example, response example
+  - Python Quick Start: complete working code snippet
+  - Error codes reference table (200, 404, 422, 500)
+
+- `webapp/app.py` — Added api_docs to imports and navigation (7 pages total)
+- `webapp/utils/api_client.py` — Added `get_global_explanations()` method
+- `CLAUDE.md` — Updated views list to include api_docs
+
+**Commands run this session (and what they did):**
+```powershell
+# Syntax-checked all 7 modified/new Python files:
+python -c "import ast; ..."   # → All 7 files parse OK
+
+# Verified all module imports and render() functions:
+python -c "from webapp.views import ...; assert hasattr(mod, 'render')"
+# → All 7 view modules import and have render()
+
+# Smoke-tested data structures (endpoints list, colors, etc.):
+python -c "from webapp.views.api_docs import ENDPOINTS; ..."
+# → 11 endpoints, all data structures valid
+
+# Launched Streamlit app:
+python -m streamlit run webapp/app.py --server.headless true
+# → Running at http://localhost:8501, HTTP 200
+```
+
+**Status:** All 7 dashboard pages complete and verified. Streamlit app
+launches successfully with navigation between all pages.
+
+**What's next (Session 22):** Integration testing with the live FastAPI
+backend to verify end-to-end prediction flow.
+
+---
+
 ### Session 20 — Streamlit Web Dashboard — *2026-06-27*
 
 **Goal:** Build a full Streamlit web dashboard that communicates with the
