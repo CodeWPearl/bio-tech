@@ -9,17 +9,11 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from webapp.utils.api_client import APIClient
-from webapp.utils.styling import get_class_color, styled_metric_card
+from webapp.utils.styling import PLOTLY_LIGHT, get_class_color, styled_metric_card
 
-PLOTLY_DARK = dict(
-    plot_bgcolor="rgba(0,0,0,0)",
-    paper_bgcolor="rgba(0,0,0,0)",
-    font_color="#CBD5E1",
-    font_family="Inter, sans-serif",
-)
-GRID = dict(gridcolor="rgba(99,102,241,0.08)")
+GRID = dict(gridcolor="#E2E8F0")
 
-MODALITY_COLORS = ["#6366F1", "#8B5CF6", "#EC4899", "#F59E0B", "#10B981"]
+MODALITY_COLORS = ["#4F46E5", "#7C3AED", "#EC4899", "#F59E0B", "#10B981"]
 
 
 def render(client: APIClient) -> None:
@@ -41,10 +35,10 @@ def render(client: APIClient) -> None:
             """
             <div class="glass-card" style="text-align:center;padding:3rem">
                 <div style="font-size:3rem;opacity:0.5;margin-bottom:1rem">\U0001f50d</div>
-                <p style="color:#94A3B8 !important;font-size:1.1rem">
+                <p style="color:#64748B !important;font-size:1.1rem">
                     Cannot fetch dataset statistics
                 </p>
-                <p style="color:#64748B !important;font-size:0.9rem">
+                <p style="color:#94A3B8 !important;font-size:0.9rem">
                     Start the API server to explore data
                 </p>
             </div>
@@ -67,7 +61,7 @@ def render(client: APIClient) -> None:
             styled_metric_card(
                 "Total Variants",
                 f"{total:,}" if total else "N/A",
-                icon="\U0001f9ec", accent="#6366F1",
+                icon="\U0001f9ec", accent="#4F46E5",
             ),
             unsafe_allow_html=True,
         )
@@ -75,7 +69,7 @@ def render(client: APIClient) -> None:
         st.markdown(
             styled_metric_card(
                 "Gene Count", str(len(gene_symbols)),
-                icon="\U0001f9ec", accent="#8B5CF6",
+                icon="\U0001f9ec", accent="#7C3AED",
             ),
             unsafe_allow_html=True,
         )
@@ -117,7 +111,7 @@ def render(client: APIClient) -> None:
             ))
             fig_class.update_layout(
                 height=350, margin=dict(l=10, r=10, t=10, b=10),
-                **PLOTLY_DARK,
+                **PLOTLY_LIGHT,
             )
             st.plotly_chart(fig_class, use_container_width=True)
 
@@ -139,7 +133,7 @@ def render(client: APIClient) -> None:
             fig_cancer.update_layout(
                 height=350, margin=dict(l=10, r=10, t=10, b=10),
                 showlegend=False,
-                **PLOTLY_DARK,
+                **PLOTLY_LIGHT,
             )
             st.plotly_chart(fig_cancer, use_container_width=True)
         else:
@@ -189,7 +183,7 @@ def render(client: APIClient) -> None:
                     xaxis_title="Class", yaxis_title="Count",
                     height=300, margin=dict(l=10, r=10, t=10, b=30),
                     xaxis=dict(**GRID), yaxis=dict(**GRID),
-                    **PLOTLY_DARK,
+                    **PLOTLY_LIGHT,
                 )
                 st.plotly_chart(fig_gene_class, use_container_width=True)
         else:
@@ -266,7 +260,7 @@ def render(client: APIClient) -> None:
                 xaxis_title="Gene", yaxis_title="Variant Count",
                 height=400, margin=dict(l=10, r=10, t=10, b=60),
                 xaxis=dict(**GRID), yaxis=dict(**GRID),
-                **PLOTLY_DARK,
+                **PLOTLY_LIGHT,
             )
             st.plotly_chart(fig_top, use_container_width=True)
 
@@ -344,7 +338,7 @@ def render(client: APIClient) -> None:
         margin=dict(l=10, r=10, t=10, b=30),
         yaxis=dict(autorange="reversed"),
         xaxis=dict(**GRID),
-        **PLOTLY_DARK,
+        **PLOTLY_LIGHT,
     )
     st.plotly_chart(fig_feat, use_container_width=True)
 
@@ -397,7 +391,7 @@ def render(client: APIClient) -> None:
                 orientation="h", yanchor="bottom", y=-0.2,
                 font=dict(size=10),
             ),
-            **PLOTLY_DARK,
+            **PLOTLY_LIGHT,
         )
         st.plotly_chart(fig_mod, use_container_width=True)
 
@@ -409,7 +403,7 @@ def render(client: APIClient) -> None:
             x=feat_vals,
             y=feat_names,
             orientation="h",
-            marker_color="#6366F1",
+            marker_color="#4F46E5",
             text=[f"{v:.4f}" for v in feat_vals],
             textposition="auto",
             textfont=dict(color="white", size=9),
@@ -420,7 +414,7 @@ def render(client: APIClient) -> None:
             margin=dict(l=10, r=10, t=10, b=30),
             yaxis=dict(autorange="reversed"),
             xaxis=dict(**GRID),
-            **PLOTLY_DARK,
+            **PLOTLY_LIGHT,
         )
         st.plotly_chart(fig_top30, use_container_width=True)
 
@@ -454,7 +448,7 @@ def render(client: APIClient) -> None:
             yaxis_title="SHAP Value",
             height=350, margin=dict(l=10, r=10, t=10, b=30),
             xaxis=dict(**GRID), yaxis=dict(**GRID),
-            **PLOTLY_DARK,
+            **PLOTLY_LIGHT,
         )
         st.plotly_chart(fig_dep, use_container_width=True)
 
@@ -473,16 +467,14 @@ def render(client: APIClient) -> None:
                 g.get("gene_symbol") == gene and g.get("is_cancer_driver", False)
                 for g in genes
             )
-            bg = (
-                "rgba(99,102,241,0.15)" if is_driver
-                else "rgba(255,255,255,0.05)"
-            )
-            border = "#6366F1" if is_driver else "rgba(255,255,255,0.1)"
+            bg = "#EEF2FF" if is_driver else "#F8FAFC"
+            border = "#4F46E5" if is_driver else "#E2E8F0"
+            text_color = "#4F46E5" if is_driver else "#1E293B"
             gene_tags += (
                 f'<span style="display:inline-block;padding:0.3rem 0.8rem;'
                 f"margin:3px;background:{bg};border:1px solid {border};"
-                f'border-radius:8px;font-size:0.8rem;color:#E2E8F0;'
-                f'font-family:monospace">{gene}</span>'
+                f"border-radius:8px;font-size:0.8rem;color:{text_color};"
+                f'font-family:monospace;font-weight:500">{gene}</span>'
             )
 
         st.markdown(
