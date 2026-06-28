@@ -84,10 +84,19 @@ multi-omics integration. Target: IEEE/Springer/Nature journal submission.
 - Communicates with FastAPI backend via HTTP (API_URL env var, default localhost:8001)
 - Views: webapp/views/ (home, single_prediction, batch_analysis, model_performance, data_explorer, api_docs, about)
   Note: directory is "views" not "pages" to prevent Streamlit multipage auto-discovery
-- Shared utilities: webapp/utils/api_client.py (APIClient class), webapp/utils/styling.py
+- Shared utilities:
+  - webapp/utils/api_client.py — APIClient class (HTTP calls to FastAPI)
+  - webapp/utils/styling.py — CSS, colors, metric cards
+  - webapp/utils/report_generator.py — generate_prediction_report() → PDF bytes
+  - webapp/utils/export.py — export_to_csv(), export_to_excel(), export_to_json()
+- Sample data: webapp/sample_data/ (sample_single_variant.json, sample_batch.csv)
+  Pre-loaded via "Try Example" buttons in single prediction and batch pages
 - Dependencies: streamlit, plotly, requests, reportlab (PDF), openpyxl (Excel)
 - Single prediction page is the core feature: input form + results panel with
   prediction card, class probabilities, uncertainty, explanations, biological context, exports
+- Full stack start: `scripts/start_webapp.bat` (Windows) or `scripts/start_webapp.sh` (Linux/Mac)
+  Launches API on port 8001 + Streamlit on port 8501
+- Docker: `docker compose up api webapp mlflow` starts all services together
 
 ## Git Conventions
 - Conventional commits: feat:, fix:, refactor:, docs:, test:, data:
