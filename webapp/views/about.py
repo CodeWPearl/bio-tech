@@ -28,29 +28,29 @@ def render(client: APIClient) -> None:
         """
         <div class="glass-card">
             <h3 style="margin-top:0">Project Overview</h3>
-            <p style="line-height:1.8">
-            This project implements a <strong style="color:#A5B4FC !important">
+            <p style="line-height:1.8;color:#475569 !important">
+            This project implements a <strong style="color:#4F46E5 !important">
             research-grade deep learning framework</strong> for predicting the
             pathogenicity of cancer-associated gene mutations. It integrates
             multiple omics data types (genomic, transcriptomic, epigenomic)
             through a cross-attention fusion mechanism to classify variants as:
             </p>
             <div style="display:flex;gap:12px;flex-wrap:wrap;margin:1rem 0">
-                <span style="padding:0.4rem 1rem;background:rgba(239,68,68,0.15);
-                       border:1px solid rgba(239,68,68,0.3);border-radius:50px;
-                       color:#F87171;font-weight:600;font-size:0.85rem">
+                <span style="padding:0.4rem 1rem;background:rgba(239,68,68,0.08);
+                       border:1px solid rgba(239,68,68,0.2);border-radius:50px;
+                       color:#DC2626;font-weight:600;font-size:0.85rem">
                        Pathogenic</span>
-                <span style="padding:0.4rem 1rem;background:rgba(249,115,22,0.15);
-                       border:1px solid rgba(249,115,22,0.3);border-radius:50px;
-                       color:#FB923C;font-weight:600;font-size:0.85rem">
+                <span style="padding:0.4rem 1rem;background:rgba(249,115,22,0.08);
+                       border:1px solid rgba(249,115,22,0.2);border-radius:50px;
+                       color:#EA580C;font-weight:600;font-size:0.85rem">
                        Likely Pathogenic</span>
-                <span style="padding:0.4rem 1rem;background:rgba(16,185,129,0.15);
-                       border:1px solid rgba(16,185,129,0.3);border-radius:50px;
-                       color:#34D399;font-weight:600;font-size:0.85rem">
+                <span style="padding:0.4rem 1rem;background:rgba(16,185,129,0.08);
+                       border:1px solid rgba(16,185,129,0.2);border-radius:50px;
+                       color:#059669;font-weight:600;font-size:0.85rem">
                        Benign</span>
-                <span style="padding:0.4rem 1rem;background:rgba(52,211,153,0.15);
-                       border:1px solid rgba(52,211,153,0.3);border-radius:50px;
-                       color:#6EE7B7;font-weight:600;font-size:0.85rem">
+                <span style="padding:0.4rem 1rem;background:rgba(52,211,153,0.08);
+                       border:1px solid rgba(52,211,153,0.2);border-radius:50px;
+                       color:#059669;font-weight:600;font-size:0.85rem">
                        Likely Benign</span>
             </div>
         </div>
@@ -63,23 +63,23 @@ def render(client: APIClient) -> None:
         """
         <div class="glass-card">
             <h3 style="margin-top:0">\U0001f52c Research Motivation</h3>
-            <p style="line-height:1.8">
+            <p style="line-height:1.8;color:#475569 !important">
             Over half of all variants in ClinVar are classified as
-            <strong style="color:#A5B4FC !important">Variants of Uncertain
+            <strong style="color:#4F46E5 !important">Variants of Uncertain
             Significance (VUS)</strong>, leaving clinicians without actionable
             guidance. Existing computational tools (SIFT, PolyPhen-2, CADD,
             REVEL) rely primarily on sequence-level features and lack
             uncertainty quantification. Our approach addresses three critical
             gaps:
             </p>
-            <ol style="line-height:2;color:#CBD5E1 !important">
-                <li><strong style="color:#A5B4FC !important">Multi-modal
+            <ol style="line-height:2;color:#475569 !important">
+                <li><strong style="color:#4F46E5 !important">Multi-modal
                 integration</strong> — combining genomic, transcriptomic,
                 and epigenomic data through cross-attention fusion</li>
-                <li><strong style="color:#A5B4FC !important">Calibrated
+                <li><strong style="color:#4F46E5 !important">Calibrated
                 uncertainty</strong> — MC Dropout and temperature scaling
                 to flag unreliable predictions for expert review</li>
-                <li><strong style="color:#A5B4FC !important">Transparent
+                <li><strong style="color:#4F46E5 !important">Transparent
                 explanations</strong> — SHAP values and attention weights
                 showing which features and modalities drive each
                 prediction</li>
@@ -106,10 +106,9 @@ def render(client: APIClient) -> None:
         else:
             st.markdown(
                 """
-                <div style="background:rgba(30,27,75,0.5);border:1px solid
-                     rgba(99,102,241,0.15);border-radius:16px;padding:2rem;
-                     text-align:center">
-                <pre style="color:#A5B4FC;font-size:0.75rem;margin:0;
+                <div style="background:#F8FAFC;border:1px solid #E2E8F0;
+                     border-radius:12px;padding:2rem;text-align:center">
+                <pre style="color:#4F46E5;font-size:0.75rem;margin:0;
                      line-height:1.6">
   ┌──────────────┐
   │  Mutation     │──┐
@@ -138,40 +137,40 @@ def render(client: APIClient) -> None:
                 <table style="width:100%;border-collapse:separate;
                        border-spacing:0 8px">
                     <tr>
-                        <td style="color:#A5B4FC !important;font-weight:600;
-                            padding:6px 12px;background:rgba(99,102,241,0.1);
+                        <td style="color:#4F46E5 !important;font-weight:600;
+                            padding:6px 12px;background:#EEF2FF;
                             border-radius:8px 0 0 8px">
                             <a href="https://www.ncbi.nlm.nih.gov/clinvar/"
-                               style="color:#A5B4FC !important">ClinVar</a>
+                               style="color:#4F46E5 !important">ClinVar</a>
                         </td>
-                        <td style="padding:6px 12px;
-                            background:rgba(255,255,255,0.03);
+                        <td style="padding:6px 12px;color:#475569 !important;
+                            background:#F8FAFC;
                             border-radius:0 8px 8px 0">
                             Pathogenicity labels (gold standard)</td>
                     </tr>
                     <tr>
-                        <td style="color:#A5B4FC !important;font-weight:600;
-                            padding:6px 12px;background:rgba(99,102,241,0.1);
+                        <td style="color:#4F46E5 !important;font-weight:600;
+                            padding:6px 12px;background:#EEF2FF;
                             border-radius:8px 0 0 8px">
                             <a href="https://www.cbioportal.org/"
-                               style="color:#A5B4FC !important">
+                               style="color:#4F46E5 !important">
                                cBioPortal / TCGA</a>
                         </td>
-                        <td style="padding:6px 12px;
-                            background:rgba(255,255,255,0.03);
+                        <td style="padding:6px 12px;color:#475569 !important;
+                            background:#F8FAFC;
                             border-radius:0 8px 8px 0">
                             Multi-omics profiles</td>
                     </tr>
                     <tr>
-                        <td style="color:#A5B4FC !important;font-weight:600;
-                            padding:6px 12px;background:rgba(99,102,241,0.1);
+                        <td style="color:#4F46E5 !important;font-weight:600;
+                            padding:6px 12px;background:#EEF2FF;
                             border-radius:8px 0 0 8px">
                             <a href="https://cancer.sanger.ac.uk/census"
-                               style="color:#A5B4FC !important">
+                               style="color:#4F46E5 !important">
                                COSMIC Census</a>
                         </td>
-                        <td style="padding:6px 12px;
-                            background:rgba(255,255,255,0.03);
+                        <td style="padding:6px 12px;color:#475569 !important;
+                            background:#F8FAFC;
                             border-radius:0 8px 8px 0">
                             Cancer driver validation</td>
                     </tr>
@@ -187,38 +186,38 @@ def render(client: APIClient) -> None:
                 <table style="width:100%;border-collapse:separate;
                        border-spacing:0 8px">
                     <tr>
-                        <td style="color:#C084FC !important;font-weight:600;
-                            padding:6px 12px;background:rgba(139,92,246,0.1);
+                        <td style="color:#7C3AED !important;font-weight:600;
+                            padding:6px 12px;background:#F5F3FF;
                             border-radius:8px 0 0 8px">Encoders</td>
-                        <td style="padding:6px 12px;
-                            background:rgba(255,255,255,0.03);
+                        <td style="padding:6px 12px;color:#475569 !important;
+                            background:#F8FAFC;
                             border-radius:0 8px 8px 0">
                             Per-modality encoders</td>
                     </tr>
                     <tr>
-                        <td style="color:#C084FC !important;font-weight:600;
-                            padding:6px 12px;background:rgba(139,92,246,0.1);
+                        <td style="color:#7C3AED !important;font-weight:600;
+                            padding:6px 12px;background:#F5F3FF;
                             border-radius:8px 0 0 8px">Fusion</td>
-                        <td style="padding:6px 12px;
-                            background:rgba(255,255,255,0.03);
+                        <td style="padding:6px 12px;color:#475569 !important;
+                            background:#F8FAFC;
                             border-radius:0 8px 8px 0">
                             Cross-attention mechanism</td>
                     </tr>
                     <tr>
-                        <td style="color:#C084FC !important;font-weight:600;
-                            padding:6px 12px;background:rgba(139,92,246,0.1);
+                        <td style="color:#7C3AED !important;font-weight:600;
+                            padding:6px 12px;background:#F5F3FF;
                             border-radius:8px 0 0 8px">Uncertainty</td>
-                        <td style="padding:6px 12px;
-                            background:rgba(255,255,255,0.03);
+                        <td style="padding:6px 12px;color:#475569 !important;
+                            background:#F8FAFC;
                             border-radius:0 8px 8px 0">
                             MC Dropout + Temp. Scaling</td>
                     </tr>
                     <tr>
-                        <td style="color:#C084FC !important;font-weight:600;
-                            padding:6px 12px;background:rgba(139,92,246,0.1);
+                        <td style="color:#7C3AED !important;font-weight:600;
+                            padding:6px 12px;background:#F5F3FF;
                             border-radius:8px 0 0 8px">Explainability</td>
-                        <td style="padding:6px 12px;
-                            background:rgba(255,255,255,0.03);
+                        <td style="padding:6px 12px;color:#475569 !important;
+                            background:#F8FAFC;
                             border-radius:0 8px 8px 0">
                             SHAP + Attention weights</td>
                     </tr>
@@ -238,8 +237,8 @@ def render(client: APIClient) -> None:
     )
     tech_cols = st.columns(4)
     techs = [
-        ("\U0001f9e0 Deep Learning", "PyTorch 2.x\nPyTorch Lightning 2.x", "#6366F1"),
-        ("\U0001f4ca ML Baselines", "scikit-learn\nXGBoost · LightGBM", "#8B5CF6"),
+        ("\U0001f9e0 Deep Learning", "PyTorch 2.x\nPyTorch Lightning 2.x", "#4F46E5"),
+        ("\U0001f4ca ML Baselines", "scikit-learn\nXGBoost · LightGBM", "#7C3AED"),
         ("\U0001f4a1 Explainability", "SHAP · LIME\nCaptum", "#EC4899"),
         ("⚙️ Infrastructure", "FastAPI · Streamlit\nMLflow · Optuna", "#F59E0B"),
     ]
@@ -247,14 +246,15 @@ def render(client: APIClient) -> None:
         with col:
             st.markdown(
                 f"""
-                <div style="background:rgba(30,27,75,0.5);
-                     border:1px solid {color}33;border-radius:16px;
+                <div style="background:#FFFFFF;
+                     border:1px solid #E2E8F0;border-radius:12px;
                      padding:1.2rem;text-align:center;
-                     border-top:3px solid {color}">
+                     border-top:3px solid {color};
+                     box-shadow:0 1px 3px rgba(0,0,0,0.06)">
                     <p style="font-weight:700;margin:0 0 0.5rem;
-                       color:#F1F5F9 !important;font-size:0.85rem">
+                       color:#1E293B !important;font-size:0.85rem">
                        {title}</p>
-                    <pre style="color:#94A3B8;font-size:0.75rem;margin:0;
+                    <pre style="color:#64748B;font-size:0.75rem;margin:0;
                          white-space:pre-wrap">{content}</pre>
                 </div>
                 """,
@@ -271,28 +271,28 @@ def render(client: APIClient) -> None:
             <div style="display:flex;gap:24px;flex-wrap:wrap;margin:1rem 0">
                 <div style="text-align:center;min-width:120px">
                     <div style="width:60px;height:60px;margin:0 auto 8px;
-                         background:linear-gradient(135deg,#6366F1,#8B5CF6);
+                         background:#4F46E5;
                          border-radius:50%;display:flex;align-items:center;
                          justify-content:center;font-size:1.5rem">
                          \U0001f9d1‍\U0001f4bb</div>
-                    <p style="margin:0;font-weight:600;color:#F1F5F9 !important;
+                    <p style="margin:0;font-weight:600;color:#1E293B !important;
                        font-size:0.85rem">Lead Researcher</p>
-                    <p style="margin:0;color:#94A3B8 !important;
+                    <p style="margin:0;color:#64748B !important;
                        font-size:0.75rem">ML / Bioinformatics</p>
                 </div>
                 <div style="text-align:center;min-width:120px">
                     <div style="width:60px;height:60px;margin:0 auto 8px;
-                         background:linear-gradient(135deg,#EC4899,#F97316);
+                         background:#EC4899;
                          border-radius:50%;display:flex;align-items:center;
                          justify-content:center;font-size:1.5rem">
                          \U0001f9ec</div>
-                    <p style="margin:0;font-weight:600;color:#F1F5F9 !important;
+                    <p style="margin:0;font-weight:600;color:#1E293B !important;
                        font-size:0.85rem">Domain Expert</p>
-                    <p style="margin:0;color:#94A3B8 !important;
+                    <p style="margin:0;color:#64748B !important;
                        font-size:0.75rem">Genomics / Oncology</p>
                 </div>
             </div>
-            <p style="color:#64748B !important;font-size:0.8rem;
+            <p style="color:#94A3B8 !important;font-size:0.8rem;
                font-style:italic">
                Author details will be added upon paper submission.</p>
         </div>
@@ -335,11 +335,11 @@ def render(client: APIClient) -> None:
         st.markdown(
             """
             <div style="text-align:center;padding:1rem;
-                 background:rgba(99,102,241,0.08);border-radius:12px;
-                 border:1px solid rgba(99,102,241,0.15)">
+                 background:#EEF2FF;border-radius:12px;
+                 border:1px solid #C7D2FE">
                 <p style="font-size:1.5rem;margin:0">\U0001f4c4</p>
                 <p style="font-weight:600;margin:0.3rem 0 0;
-                   color:#F1F5F9 !important;font-size:0.85rem">
+                   color:#1E293B !important;font-size:0.85rem">
                    Paper PDF</p>
                 <p style="color:#64748B !important;font-size:0.75rem;
                    margin:0">Available upon publication</p>
@@ -351,11 +351,11 @@ def render(client: APIClient) -> None:
         st.markdown(
             """
             <div style="text-align:center;padding:1rem;
-                 background:rgba(99,102,241,0.08);border-radius:12px;
-                 border:1px solid rgba(99,102,241,0.15)">
+                 background:#EEF2FF;border-radius:12px;
+                 border:1px solid #C7D2FE">
                 <p style="font-size:1.5rem;margin:0">\U0001f4bb</p>
                 <p style="font-weight:600;margin:0.3rem 0 0;
-                   color:#F1F5F9 !important;font-size:0.85rem">
+                   color:#1E293B !important;font-size:0.85rem">
                    GitHub Repository</p>
                 <p style="color:#64748B !important;font-size:0.75rem;
                    margin:0">Will be public after acceptance</p>
@@ -367,11 +367,11 @@ def render(client: APIClient) -> None:
         st.markdown(
             """
             <div style="text-align:center;padding:1rem;
-                 background:rgba(99,102,241,0.08);border-radius:12px;
-                 border:1px solid rgba(99,102,241,0.15)">
+                 background:#EEF2FF;border-radius:12px;
+                 border:1px solid #C7D2FE">
                 <p style="font-size:1.5rem;margin:0">\U0001f4ca</p>
                 <p style="font-weight:600;margin:0.3rem 0 0;
-                   color:#F1F5F9 !important;font-size:0.85rem">
+                   color:#1E293B !important;font-size:0.85rem">
                    API Docs (Swagger)</p>
                 <p style="color:#64748B !important;font-size:0.75rem;
                    margin:0">localhost:8001/docs</p>
@@ -387,9 +387,9 @@ def render(client: APIClient) -> None:
         """
         <div class="glass-card">
             <h3 style="margin-top:0">\U0001f4dc License</h3>
-            <p style="line-height:1.8">
+            <p style="line-height:1.8;color:#475569 !important">
             This project is licensed under the
-            <strong style="color:#A5B4FC !important">MIT License</strong>.
+            <strong style="color:#4F46E5 !important">MIT License</strong>.
             You are free to use, modify, and distribute this software for
             academic and commercial purposes, provided the copyright notice
             and license terms are included.
@@ -404,16 +404,16 @@ def render(client: APIClient) -> None:
         """
         <div class="glass-card">
             <h3 style="margin-top:0">\U0001f64f Acknowledgments</h3>
-            <ul style="line-height:2;color:#CBD5E1 !important">
-                <li><strong style="color:#A5B4FC !important">NCBI ClinVar</strong>
+            <ul style="line-height:2;color:#475569 !important">
+                <li><strong style="color:#4F46E5 !important">NCBI ClinVar</strong>
                     — for providing the gold-standard pathogenicity labels</li>
-                <li><strong style="color:#A5B4FC !important">cBioPortal &amp;
+                <li><strong style="color:#4F46E5 !important">cBioPortal &amp;
                     TCGA</strong> — for multi-omics cancer data</li>
-                <li><strong style="color:#A5B4FC !important">COSMIC Cancer Gene
+                <li><strong style="color:#4F46E5 !important">COSMIC Cancer Gene
                     Census</strong> — for curated cancer driver gene lists</li>
-                <li><strong style="color:#A5B4FC !important">PyTorch &amp;
+                <li><strong style="color:#4F46E5 !important">PyTorch &amp;
                     PyTorch Lightning</strong> — deep learning framework</li>
-                <li><strong style="color:#A5B4FC !important">SHAP</strong>
+                <li><strong style="color:#4F46E5 !important">SHAP</strong>
                     — for model explainability methods</li>
             </ul>
         </div>
@@ -428,12 +428,12 @@ def render(client: APIClient) -> None:
         status_cols = st.columns(3)
         status = health.get("status", "unknown")
         with status_cols[0]:
-            color = "#10B981" if status == "healthy" else "#EF4444"
+            color = "#059669" if status == "healthy" else "#DC2626"
             st.markdown(
                 f"""<div style="display:flex;align-items:center;gap:10px">
                 <div style="width:12px;height:12px;background:{color};
-                     border-radius:50%;box-shadow:0 0 10px {color}"></div>
-                <span style="color:{color};font-size:1.1rem;font-weight:700">
+                     border-radius:50%"></div>
+                <span style="color:{color} !important;font-size:1.1rem;font-weight:700">
                 {status.upper()}</span></div>""",
                 unsafe_allow_html=True,
             )
