@@ -11,6 +11,7 @@ import streamlit as st
 
 from webapp.views import (
     about,
+    api_docs,
     batch_analysis,
     data_explorer,
     home,
@@ -37,6 +38,7 @@ PAGES = {
     "\U0001f4ca  Batch Analysis": batch_analysis,
     "\U0001f4c8  Model Performance": model_performance,
     "\U0001f9ea  Data Explorer": data_explorer,
+    "\U0001f4bb  API Docs": api_docs,
     "\U0001f4d6  About": about,
 }
 
