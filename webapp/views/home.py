@@ -31,12 +31,12 @@ def render(client: APIClient) -> None:
     with col1:
         val = f"{total_variants:,}" if isinstance(total_variants, int) and total_variants > 0 else "N/A"
         st.markdown(
-            styled_metric_card("Training Variants", val, icon="\U0001f4ca", accent="#6366F1"),
+            styled_metric_card("Training Variants", val, icon="\U0001f4ca", accent="#4F46E5"),
             unsafe_allow_html=True,
         )
     with col2:
         st.markdown(
-            styled_metric_card("Architecture", model_info.get("architecture", "Multi-Omics DL"), icon="\U0001f9e0", accent="#8B5CF6"),
+            styled_metric_card("Architecture", model_info.get("architecture", "Multi-Omics DL"), icon="\U0001f9e0", accent="#7C3AED"),
             unsafe_allow_html=True,
         )
     with col3:
@@ -109,9 +109,9 @@ def render(client: APIClient) -> None:
         else:
             st.markdown(
                 """
-                <div style="background:rgba(30,27,75,0.5);border:1px solid rgba(99,102,241,0.15);
-                     border-radius:16px;padding:2rem;text-align:center">
-                <pre style="color:#A5B4FC;font-size:0.75rem;margin:0;line-height:1.5">
+                <div style="background:#F8FAFC;border:1px solid #E2E8F0;
+                     border-radius:12px;padding:2rem;text-align:center">
+                <pre style="color:#4F46E5;font-size:0.75rem;margin:0;line-height:1.5">
   ┌──────────────┐
   │  Genomic     │──┐
   │  Encoder     │  │
@@ -134,7 +134,7 @@ def render(client: APIClient) -> None:
         """
         <div class="glass-card">
             <h3 style="margin-top:0">\U0001f4dc Research Abstract</h3>
-            <p style="font-style:italic;line-height:1.8;color:#94A3B8 !important">
+            <p style="font-style:italic;line-height:1.8;color:#64748B !important">
             Accurate classification of cancer-associated gene mutations as pathogenic
             or benign is essential for precision oncology. We present a multi-omics
             deep learning framework that integrates genomic, transcriptomic, and
