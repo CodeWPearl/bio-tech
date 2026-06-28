@@ -53,14 +53,14 @@ with st.sidebar:
         <div style="text-align:center;padding:1.5rem 0 1rem 0">
             <div style="
                 width:60px;height:60px;margin:0 auto 0.8rem;
-                background:linear-gradient(135deg,#6366F1,#8B5CF6);
-                border-radius:16px;display:flex;align-items:center;
-                justify-content:center;box-shadow:0 8px 25px rgba(99,102,241,0.3);
+                background:#4F46E5;
+                border-radius:14px;display:flex;align-items:center;
+                justify-content:center;box-shadow:0 2px 8px rgba(79,70,229,0.2);
             ">
                 <span style="font-size:1.8rem;line-height:1">\U0001f9ec</span>
             </div>
             <h2 style="margin:0;font-size:1rem;font-weight:700;
-                       color:#F1F5F9 !important;letter-spacing:-0.01em">
+                       color:#1E293B !important;letter-spacing:-0.01em">
                 Cancer Mutation<br>Pathogenicity Predictor
             </h2>
             <p style="margin:0.3rem 0 0;font-size:0.7rem;color:#64748B !important;
@@ -87,11 +87,10 @@ with st.sidebar:
     if health and health.get("status") == "healthy":
         st.markdown(
             """<div style="display:flex;align-items:center;gap:8px;padding:0.4rem 0.8rem;
-               background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);
+               background:#F0FDF4;border:1px solid #BBF7D0;
                border-radius:10px">
-               <div style="width:8px;height:8px;background:#10B981;border-radius:50%;
-                    box-shadow:0 0 8px #10B981"></div>
-               <span style="color:#34D399 !important;font-size:0.8rem;font-weight:600">
+               <div style="width:8px;height:8px;background:#10B981;border-radius:50%"></div>
+               <span style="color:#059669 !important;font-size:0.8rem;font-weight:600">
                API Connected</span>
             </div>""",
             unsafe_allow_html=True,
@@ -99,18 +98,18 @@ with st.sidebar:
     else:
         st.markdown(
             """<div style="display:flex;align-items:center;gap:8px;padding:0.4rem 0.8rem;
-               background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);
+               background:#FEF2F2;border:1px solid #FECACA;
                border-radius:10px">
                <div style="width:8px;height:8px;background:#EF4444;border-radius:50%"></div>
-               <span style="color:#F87171 !important;font-size:0.8rem;font-weight:600">
+               <span style="color:#DC2626 !important;font-size:0.8rem;font-weight:600">
                API Offline</span>
             </div>""",
             unsafe_allow_html=True,
         )
         st.markdown(
-            '<p style="color:#94A3B8 !important;font-size:0.7rem;margin:0.4rem 0 0">'
+            '<p style="color:#64748B !important;font-size:0.7rem;margin:0.4rem 0 0">'
             "Start the API server:<br>"
-            '<code style="color:#A5B4FC;font-size:0.65rem">'
+            '<code style="color:#4F46E5;font-size:0.65rem">'
             "uvicorn api.main:app --port 8001</code></p>",
             unsafe_allow_html=True,
         )
