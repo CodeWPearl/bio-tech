@@ -101,3 +101,9 @@ class APIClient:
         """Fetch detailed info for a specific gene."""
         result = self._request("GET", f"/genes/{gene_symbol}", timeout=10)
         return result if isinstance(result, dict) else {}
+
+    @st.cache_data(ttl=300, show_spinner=False)
+    def get_global_explanations(_self) -> dict:
+        """Fetch global feature importance (cached, silent on failure)."""
+        result = _self._request("GET", "/explain/global", timeout=10, silent=True)
+        return result if isinstance(result, dict) else {}
