@@ -15,7 +15,7 @@ from typing import AsyncIterator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import explain, explore, predict
+from api.routes import explain, explore, knowledge, predict
 from api.schemas import HealthResponse
 from api.services.feature_service import FeatureService
 from api.services.model_service import ModelService
@@ -103,6 +103,7 @@ app.add_middleware(
 app.include_router(predict.router)
 app.include_router(explore.router)
 app.include_router(explain.router)
+app.include_router(knowledge.router)
 
 
 @app.get("/health", response_model=HealthResponse)
