@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from io import BytesIO
+from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from webapp.utils.api_client import APIClient
+from webapp.utils.export import export_to_csv, export_to_excel
 from webapp.utils.styling import get_class_color, styled_metric_card
 
 PLOTLY_DARK = dict(
@@ -28,13 +29,22 @@ REQUIRED_COLUMNS = [
     "variant_allele",
 ]
 
-SAMPLE_DATA = """gene_symbol,mutation_type,chromosome,start_position,reference_allele,variant_allele,protein_change
-BRCA1,Missense_Mutation,17,43044295,A,T,p.C61G
-TP53,Nonsense_Mutation,17,7577538,C,T,p.R213*
-BRAF,Missense_Mutation,7,140753336,A,T,p.V600E
-KRAS,Missense_Mutation,12,25398284,C,A,p.G12V
-EGFR,Missense_Mutation,7,55259515,T,G,p.L858R
-"""
+SAMPLE_CSV_PATH = Path(__file__).resolve().parent.parent / "sample_data" / "sample_batch.csv"
+
+
+def _load_sample_csv() -> str:
+    """Load sample batch CSV from file, fallback to inline data."""
+    if SAMPLE_CSV_PATH.is_file():
+        return SAMPLE_CSV_PATH.read_text(encoding="utf-8")
+    return (
+        "gene_symbol,mutation_type,chromosome,start_position,"
+        "reference_allele,variant_allele,protein_change\n"
+        "BRCA1,Missense_Mutation,17,43044295,A,T,p.C61G\n"
+        "TP53,Nonsense_Mutation,17,7577538,C,T,p.R213*\n"
+        "BRAF,Missense_Mutation,7,140753336,A,T,p.V600E\n"
+        "KRAS,Missense_Mutation,12,25398284,C,A,p.G12V\n"
+        "EGFR,Missense_Mutation,7,55259515,T,G,p.L858R\n"
+    )
 
 
 def _parse_upload(uploaded_file: object) -> pd.DataFrame | None:
@@ -121,7 +131,7 @@ def render(client: APIClient) -> None:
         st.markdown("<br>", unsafe_allow_html=True)
         st.download_button(
             "\U0001f4e5  Sample CSV",
-            data=SAMPLE_DATA,
+            data=_load_sample_csv(),
             file_name="sample_variants.csv",
             mime="text/csv",
             use_container_width=True,
@@ -289,24 +299,19 @@ def render(client: APIClient) -> None:
     st.markdown("---")
     dl_cols = st.columns(2)
     with dl_cols[0]:
-        csv_data = results_df.to_csv(index=False)
+        csv_data = export_to_csv(predictions)
         st.download_button(
             "\U0001f4e5  Download Results (CSV)", data=csv_data,
             file_name="batch_results.csv", mime="text/csv", use_container_width=True,
         )
     with dl_cols[1]:
-        try:
-            excel_buffer = BytesIO()
-            with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
-                results_df.to_excel(writer, sheet_name="Predictions", index=False)
-                if "batch_df" in st.session_state:
-                    st.session_state["batch_df"].to_excel(writer, sheet_name="Input Data", index=False)
-                pd.DataFrame([summary]).to_excel(writer, sheet_name="Summary", index=False)
+        excel_bytes = export_to_excel(predictions, summary)
+        if excel_bytes:
             st.download_button(
-                "\U0001f4e5  Download Report (Excel)", data=excel_buffer.getvalue(),
+                "\U0001f4e5  Download Report (Excel)", data=excel_bytes,
                 file_name="batch_report.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
-        except ImportError:
+        else:
             st.caption("Excel export requires `openpyxl` package.")

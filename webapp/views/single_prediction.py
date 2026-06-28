@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
-from io import BytesIO
+from pathlib import Path
 
-import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
 from webapp.utils.api_client import APIClient
+from webapp.utils.export import export_to_json
+from webapp.utils.report_generator import generate_prediction_report
 from webapp.utils.styling import get_class_color, get_confidence_color
 
 PLOTLY_DARK = dict(
@@ -32,93 +33,14 @@ MUTATION_TYPES = [
 
 CHROMOSOMES = [str(i) for i in range(1, 23)] + ["X", "Y"]
 
+SAMPLE_DATA_PATH = Path(__file__).resolve().parent.parent / "sample_data" / "sample_single_variant.json"
 
-def _build_pdf_report(response: dict, request_data: dict) -> bytes:
-    """Generate a simple PDF report for the prediction result."""
-    try:
-        from reportlab.lib.pagesizes import letter
-        from reportlab.lib.units import inch
-        from reportlab.platypus import (
-            Paragraph,
-            SimpleDocTemplate,
-            Spacer,
-            Table,
-            TableStyle,
-        )
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.lib import colors
-    except ImportError:
-        return b""
 
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
-    styles = getSampleStyleSheet()
-    elements: list = []
-
-    elements.append(Paragraph("Cancer Mutation Pathogenicity Report", styles["Title"]))
-    elements.append(Spacer(1, 0.3 * inch))
-
-    elements.append(Paragraph("Variant Information", styles["Heading2"]))
-    variant_data = [
-        ["Gene Symbol", request_data.get("gene_symbol", "")],
-        ["Mutation Type", request_data.get("mutation_type", "")],
-        ["Chromosome", request_data.get("chromosome", "")],
-        ["Position", str(request_data.get("start_position", ""))],
-        ["Ref / Alt", f"{request_data.get('reference_allele', '')} > {request_data.get('variant_allele', '')}"],
-        ["Protein Change", request_data.get("protein_change", "N/A") or "N/A"],
-    ]
-    table = Table(variant_data, colWidths=[2.5 * inch, 4 * inch])
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (0, -1), colors.Color(0.39, 0.4, 0.95)),
-        ("TEXTCOLOR", (0, 0), (0, -1), colors.white),
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-    ]))
-    elements.append(table)
-    elements.append(Spacer(1, 0.3 * inch))
-
-    elements.append(Paragraph("Prediction Result", styles["Heading2"]))
-    pred_class = response.get("predicted_class", "Unknown")
-    confidence = response.get("confidence", 0)
-    recommendation = response.get("recommendation", "")
-    result_data = [
-        ["Predicted Class", pred_class],
-        ["Confidence", f"{confidence * 100:.1f}%"],
-        ["Recommendation", recommendation],
-    ]
-    table2 = Table(result_data, colWidths=[2.5 * inch, 4 * inch])
-    table2.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (0, -1), colors.Color(0.39, 0.4, 0.95)),
-        ("TEXTCOLOR", (0, 0), (0, -1), colors.white),
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-    ]))
-    elements.append(table2)
-    elements.append(Spacer(1, 0.3 * inch))
-
-    class_probs = response.get("class_probabilities", {})
-    if class_probs:
-        elements.append(Paragraph("Class Probabilities", styles["Heading2"]))
-        prob_data = [[cls, f"{prob * 100:.2f}%"] for cls, prob in class_probs.items()]
-        table3 = Table(prob_data, colWidths=[3 * inch, 3.5 * inch])
-        table3.setStyle(TableStyle([
-            ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-            ("FONTSIZE", (0, 0), (-1, -1), 10),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ]))
-        elements.append(table3)
-
-    doc.build(elements)
-    return buffer.getvalue()
+def _load_sample_variant() -> dict | None:
+    """Load the sample single variant JSON for the 'Try example' button."""
+    if SAMPLE_DATA_PATH.is_file():
+        return json.loads(SAMPLE_DATA_PATH.read_text(encoding="utf-8"))
+    return None
 
 
 def _render_input_form(client: APIClient) -> dict | None:
@@ -129,11 +51,20 @@ def _render_input_form(client: APIClient) -> dict | None:
         unsafe_allow_html=True,
     )
 
+    sample = _load_sample_variant()
+    if sample:
+        if st.button("\U0001f9ea  Try Example (BRAF V600E)", use_container_width=True):
+            st.session_state["sample_loaded"] = sample
+            st.rerun()
+
+    sample_data = st.session_state.pop("sample_loaded", None)
+
     genes = client.get_genes()
     gene_symbols = sorted([g["gene_symbol"] for g in genes]) if genes else []
 
     gene_symbol = st.text_input(
         "Gene Symbol",
+        value=sample_data.get("gene_symbol", "") if sample_data else "",
         placeholder="e.g. BRCA1, TP53, BRAF",
         help="Enter a gene symbol. Known cancer driver genes are suggested.",
     )
@@ -443,24 +374,25 @@ def _render_results(response: dict, request_data: dict) -> None:
     # --- f) Export Section ---
     st.markdown("---")
     exp_cols = st.columns(2)
+    variant_id = response.get("variant_id", "variant")
     with exp_cols[0]:
-        pdf_bytes = _build_pdf_report(response, request_data)
+        pdf_bytes = generate_prediction_report(response)
         if pdf_bytes:
             st.download_button(
                 "\U0001f4e5  Download Report (PDF)",
                 data=pdf_bytes,
-                file_name=f"pathogenicity_report_{response.get('variant_id', 'variant')}.pdf",
+                file_name=f"pathogenicity_report_{variant_id}.pdf",
                 mime="application/pdf",
                 use_container_width=True,
             )
         else:
             st.caption("PDF export requires `reportlab` package.")
     with exp_cols[1]:
-        json_str = json.dumps(response, indent=2)
+        json_str = export_to_json(response)
         st.download_button(
             "\U0001f4cb  Download as JSON",
             data=json_str,
-            file_name=f"prediction_{response.get('variant_id', 'variant')}.json",
+            file_name=f"prediction_{variant_id}.json",
             mime="application/json",
             use_container_width=True,
         )

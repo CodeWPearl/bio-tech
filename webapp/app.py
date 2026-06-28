@@ -30,7 +30,12 @@ st.set_page_config(
 
 st.markdown(get_custom_css(), unsafe_allow_html=True)
 
-client = APIClient()
+if "client" not in st.session_state:
+    st.session_state["client"] = APIClient()
+client: APIClient = st.session_state["client"]
+
+if "current_page" not in st.session_state:
+    st.session_state["current_page"] = "\U0001f3e0  Home"
 
 PAGES = {
     "\U0001f3e0  Home": home,
@@ -71,8 +76,10 @@ with st.sidebar:
     selected_page = st.radio(
         "Navigation",
         list(PAGES.keys()),
+        index=list(PAGES.keys()).index(st.session_state["current_page"]),
         label_visibility="collapsed",
     )
+    st.session_state["current_page"] = selected_page
 
     st.markdown("---")
 
@@ -98,6 +105,13 @@ with st.sidebar:
                <span style="color:#F87171 !important;font-size:0.8rem;font-weight:600">
                API Offline</span>
             </div>""",
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<p style="color:#94A3B8 !important;font-size:0.7rem;margin:0.4rem 0 0">'
+            "Start the API server:<br>"
+            '<code style="color:#A5B4FC;font-size:0.65rem">'
+            "uvicorn api.main:app --port 8001</code></p>",
             unsafe_allow_html=True,
         )
 
