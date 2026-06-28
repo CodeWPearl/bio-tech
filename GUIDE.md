@@ -2910,6 +2910,59 @@ medical data (ClinVar labels + cBioPortal omics) and prepares it for training.
 
 ---
 
+### Session — Phase 3: Cancer Precautions & Cure Options — *2026-06-28*
+
+**Goal:** Add a comprehensive cancer treatment/precautions knowledge base and a
+new Cure Options page to the dashboard, with integration into prediction results.
+
+**What was created/changed:**
+- `webapp/data/__init__.py` — new package init for the data module
+- `webapp/data/cancer_knowledge.py` (~350 lines) — structured knowledge base with
+  5 TCGA cancer types (Breast, Lung, Colorectal, Uterine, Ovarian), each containing
+  overview, precautions (4 categories), treatment options (5-6 per type with stage
+  badges), 5-year survival rates, key genes, and clinical resource links.
+  Also includes pathogenicity guidance for all 4 classification levels.
+- `webapp/views/cure_options.py` (~250 lines) — new Cure Options page with cancer
+  type selector, tabbed layout (Precautions, Treatments, Survival Rates, Resources),
+  survival rate bar chart, gene badges, clinical trial/NCCN/NCI links, and
+  research disclaimer banner.
+- `api/routes/knowledge.py` (~60 lines) — REST endpoints:
+  `GET /knowledge/cancer-types` (list with summaries) and
+  `GET /knowledge/cancer-types/{type}` (full detail with case-insensitive lookup).
+- `api/main.py` — added knowledge router import and inclusion.
+- `webapp/app.py` — added cure_options import and Cure Options entry to PAGES dict.
+- `webapp/views/single_prediction.py` — after prediction results, shows
+  pathogenicity guidance (severity, recommendations, follow-up) for Pathogenic/
+  Likely Pathogenic results, and a collapsible treatment/precautions panel when
+  cancer type is one of the 5 TCGA types.
+- `webapp/views/batch_analysis.py` — after results summary, shows cure options
+  guidance section for batches containing pathogenic variants, with cancer type
+  cards linking to the Cure Options page.
+- `PLAN.md` — marked Phase 3 as completed.
+
+**Commands run this session (and what they did):**
+```powershell
+# Verified all 8 files pass Python AST parsing:
+python -m py_compile webapp/data/__init__.py         # OK
+python -m py_compile webapp/data/cancer_knowledge.py # OK
+python -m py_compile webapp/views/cure_options.py    # OK
+python -m py_compile api/routes/knowledge.py         # OK
+python -m py_compile api/main.py                     # OK
+python -m py_compile webapp/app.py                   # OK
+python -m py_compile webapp/views/single_prediction.py  # OK
+python -m py_compile webapp/views/batch_analysis.py     # OK
+
+# Validated knowledge base data integrity:
+python -c "from webapp.data.cancer_knowledge import ..."
+# 5 cancer types, 4 pathogenicity classes, all data complete
+```
+
+**Status:** ✅ Phase 3 complete. All files verified.
+
+**What's next:** Phase 4 (Patient Profile System) or Phase 5 (Book a Doctor).
+
+---
+
 *Template for future sessions (copy this when starting a new entry):*
 
 ```markdown
