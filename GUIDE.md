@@ -210,6 +210,64 @@ git commit -m "message"   # save a snapshot with a short description
 > what to do next. **Newest at the top.** This section is updated at the end of
 > every session.
 
+### Session 22 — Final Integration & Polish — *2026-06-28*
+
+**Goal:** Wire up PDF report generation, data export utilities, sample data for
+"Try example" buttons, startup scripts, and Docker services so the full stack
+runs with one command.
+
+**What was created/changed:**
+- `webapp/utils/report_generator.py` — professional PDF report generator using
+  reportlab. Takes a prediction response dict and produces a polished PDF with
+  variant info, prediction results, class probabilities, uncertainty analysis,
+  top features, modality contributions, biological context, and a research
+  disclaimer. Used by the single prediction page's "Download Report" button.
+- `webapp/utils/export.py` — data export utilities:
+  - `export_to_csv()` — turns a list of prediction dicts into a CSV string.
+  - `export_to_excel()` — creates a multi-sheet Excel workbook (Predictions,
+    Summary Statistics, Feature Importance) from batch results.
+  - `export_to_json()` — pretty-prints a prediction response.
+- `webapp/sample_data/sample_single_variant.json` — example BRAF V600E input,
+  pre-loaded by the "Try Example" button on the single prediction page.
+- `webapp/sample_data/sample_batch.csv` — 20 well-known cancer variants for
+  demo batch analysis (BRCA1, TP53, BRAF, KRAS, EGFR, etc.).
+- `webapp/views/single_prediction.py` — updated to use the new report generator
+  and export module; added "Try Example (BRAF V600E)" button that pre-fills the
+  input form from sample data.
+- `webapp/views/batch_analysis.py` — updated to use the new export module and
+  load sample CSV from file.
+- `webapp/app.py` — added session state management for navigation and API client;
+  added helpful instructions when API is offline.
+- `docker-compose.yml` — added `api` service (port 8001) and `webapp` service
+  (port 8501, depends on api), so `docker compose up api webapp` starts both.
+- `scripts/start_webapp.sh` — shell script that starts API + Streamlit together.
+- `scripts/start_webapp.bat` — Windows batch script equivalent.
+- `CLAUDE.md` — updated Streamlit Dashboard section with new utils, sample data,
+  startup scripts, and Docker usage.
+
+**Commands run this session (and what they did):**
+```powershell
+# Ran the full test suite to confirm nothing broke:
+python -m pytest tests/ -v --tb=short   # → 668 passed
+```
+
+**How to start the full dashboard (2 ways):**
+```powershell
+# Option 1 — Windows script (starts API on 8001, dashboard on 8501):
+scripts\start_webapp.bat
+
+# Option 2 — Docker (starts API, dashboard, and MLflow):
+docker compose up api webapp mlflow
+```
+
+**Status:** ✅ Done — all 668 tests pass. PDF report, CSV/Excel/JSON exports,
+sample data, startup scripts, and Docker services are all in place.
+
+**What's next:** The project is feature-complete. Final tasks would be training
+on real data, generating publication figures, and writing the research paper.
+
+---
+
 ### Session 21 — Dashboard Enhancement & API Docs Page — *2026-06-28*
 
 **Goal:** Enhance all Streamlit dashboard pages with additional interactive
