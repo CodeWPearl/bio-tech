@@ -9,6 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from webapp.data.cancer_knowledge import CANCER_KNOWLEDGE, get_pathogenicity_guidance
 from webapp.utils.api_client import APIClient
 from webapp.utils.export import export_to_csv, export_to_excel
 from webapp.utils.styling import PLOTLY_LIGHT, get_class_color, styled_metric_card
@@ -290,6 +291,74 @@ def render(client: APIClient) -> None:
         )
         fig_gene.update_layout(height=350, margin=dict(l=10, r=10, t=10, b=30), **PLOTLY_LIGHT)
         st.plotly_chart(fig_gene, use_container_width=True)
+
+    # --- Cure Options Summary for Pathogenic Results ---
+    pathogenic_preds = [
+        p for p in predictions
+        if p.get("predicted_class") in ("Pathogenic", "Likely Pathogenic")
+    ]
+    if pathogenic_preds:
+        st.markdown("---")
+        st.markdown("#### \U0001f3e5 Treatment & Precaution Guidance")
+        st.markdown(
+            '<p style="color:#64748B !important;font-size:0.9rem">'
+            f"<strong>{len(pathogenic_preds)}</strong> variant(s) classified "
+            "as Pathogenic or Likely Pathogenic. Review treatment and "
+            "precaution information for relevant cancer types below.</p>",
+            unsafe_allow_html=True,
+        )
+
+        input_df = st.session_state.get("batch_df")
+        cancer_types_found: set[str] = set()
+        if input_df is not None and "cancer_type" in input_df.columns:
+            for ct in input_df["cancer_type"].dropna().unique():
+                if ct in CANCER_KNOWLEDGE:
+                    cancer_types_found.add(ct)
+
+        if cancer_types_found:
+            for ct in sorted(cancer_types_found):
+                info = CANCER_KNOWLEDGE[ct]
+                st.markdown(
+                    f"""
+                    <div style="background:#FFFFFF;border:1px solid #E2E8F0;
+                         border-left:4px solid #4F46E5;border-radius:0 10px 10px 0;
+                         padding:1rem 1.2rem;margin-bottom:0.8rem;
+                         box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+                        <strong style="color:#1E293B !important">{ct}</strong>
+                        <span style="background:#EEF2FF;color:#4F46E5;
+                               padding:0.2rem 0.5rem;border-radius:6px;
+                               font-size:0.75rem;font-weight:600;
+                               margin-left:8px">{info['abbreviation']}</span>
+                        <p style="color:#475569 !important;font-size:0.85rem;
+                           margin:0.5rem 0 0">{info['overview'][:200]}...</p>
+                        <p style="color:#4F46E5 !important;font-size:0.85rem;
+                           font-weight:600;margin:0.5rem 0 0">
+                        Navigate to <em>Cure Options</em> in the sidebar for
+                        full treatment details and clinical resources.</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.info(
+                "Navigate to the **Cure Options** page in the sidebar for "
+                "detailed treatment information and clinical resources."
+            )
+
+        guidance = get_pathogenicity_guidance("Pathogenic")
+        if guidance:
+            st.markdown(
+                f"""
+                <div style="background:#FEF2F2;border:1px solid #FECACA;
+                     border-radius:10px;padding:0.8rem 1.2rem;margin-top:0.5rem">
+                    <strong style="color:#991B1B !important;font-size:0.9rem">
+                    General Recommendation:</strong>
+                    <p style="color:#991B1B !important;font-size:0.85rem;
+                       margin:0.3rem 0 0">{guidance['recommendation']}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
     st.markdown("---")
     dl_cols = st.columns(2)
