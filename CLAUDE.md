@@ -19,8 +19,8 @@ multi-omics integration. Target: IEEE/Springer/Nature journal submission.
 - Test: `pytest tests/ -v --tb=short`
 - Lint: `ruff check src/ scripts/ api/ && mypy src/ --ignore-missing-imports`
 - Format: `ruff format src/ scripts/ api/`
-- API: `uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload`
-- Dashboard: `streamlit run webapp/app.py` (requires API running on port 8000)
+- API: `python -m uvicorn api.main:app --host 0.0.0.0 --port 8001 --reload`
+- Dashboard: `python -m streamlit run webapp/app.py` (requires API running on port 8001)
 
 ## Code Standards
 - Type hints on ALL function signatures (parameters + return)
@@ -81,7 +81,7 @@ multi-omics integration. Target: IEEE/Springer/Nature journal submission.
 
 ## Streamlit Dashboard (webapp/)
 - Entry point: `streamlit run webapp/app.py` (port 8501)
-- Communicates with FastAPI backend via HTTP (API_URL env var, default localhost:8000)
+- Communicates with FastAPI backend via HTTP (API_URL env var, default localhost:8001)
 - Views: webapp/views/ (home, single_prediction, batch_analysis, model_performance, data_explorer, about)
   Note: directory is "views" not "pages" to prevent Streamlit multipage auto-discovery
 - Shared utilities: webapp/utils/api_client.py (APIClient class), webapp/utils/styling.py
