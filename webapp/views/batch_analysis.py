@@ -11,14 +11,9 @@ import streamlit as st
 
 from webapp.utils.api_client import APIClient
 from webapp.utils.export import export_to_csv, export_to_excel
-from webapp.utils.styling import get_class_color, styled_metric_card
+from webapp.utils.styling import PLOTLY_LIGHT, get_class_color, styled_metric_card
 
-PLOTLY_DARK = dict(
-    plot_bgcolor="rgba(0,0,0,0)",
-    paper_bgcolor="rgba(0,0,0,0)",
-    font_color="#CBD5E1",
-    font_family="Inter, sans-serif",
-)
+GRID = dict(gridcolor="#E2E8F0")
 
 REQUIRED_COLUMNS = [
     "gene_symbol",
@@ -142,13 +137,13 @@ def render(client: APIClient) -> None:
             f"""
             <div class="glass-card" style="text-align:center;padding:3rem">
                 <div style="font-size:3rem;opacity:0.5;margin-bottom:1rem">\U0001f4c1</div>
-                <p style="color:#94A3B8 !important;font-size:1rem">
+                <p style="color:#64748B !important;font-size:1rem">
                     Upload a CSV or TSV file with columns:<br>
-                    <code style="color:#A5B4FC">{', '.join(REQUIRED_COLUMNS)}</code>
+                    <code style="color:#4F46E5">{', '.join(REQUIRED_COLUMNS)}</code>
                 </p>
-                <p style="color:#64748B !important;font-size:0.85rem">
-                    Optional: <code style="color:#A5B4FC">protein_change</code>,
-                    <code style="color:#A5B4FC">cancer_type</code>
+                <p style="color:#94A3B8 !important;font-size:0.85rem">
+                    Optional: <code style="color:#4F46E5">protein_change</code>,
+                    <code style="color:#4F46E5">cancer_type</code>
                 </p>
             </div>
             """,
@@ -208,13 +203,13 @@ def render(client: APIClient) -> None:
     low_conf = len([p for p in predictions if p.get("confidence", 0) < 0.6])
 
     with s_cols[0]:
-        st.markdown(styled_metric_card("Total", str(total), icon="\U0001f4cb", accent="#6366F1"), unsafe_allow_html=True)
+        st.markdown(styled_metric_card("Total", str(total), icon="\U0001f4cb", accent="#4F46E5"), unsafe_allow_html=True)
     with s_cols[1]:
         st.markdown(styled_metric_card("Pathogenic", str(pathogenic_count), icon="⚠️", accent="#EF4444"), unsafe_allow_html=True)
     with s_cols[2]:
         st.markdown(styled_metric_card("Benign", str(benign_count), icon="✅", accent="#10B981"), unsafe_allow_html=True)
     with s_cols[3]:
-        st.markdown(styled_metric_card("Avg Conf", f"{avg_conf * 100:.1f}%", icon="\U0001f3af", accent="#8B5CF6"), unsafe_allow_html=True)
+        st.markdown(styled_metric_card("Avg Conf", f"{avg_conf * 100:.1f}%", icon="\U0001f3af", accent="#7C3AED"), unsafe_allow_html=True)
     with s_cols[4]:
         st.markdown(styled_metric_card("Low Conf", str(low_conf), icon="⚡", accent="#F59E0B"), unsafe_allow_html=True)
 
@@ -236,10 +231,10 @@ def render(client: APIClient) -> None:
         display_df = results_df
 
     _CLASS_BG = {
-        "Pathogenic": "background-color: rgba(239,68,68,0.15)",
-        "Likely Pathogenic": "background-color: rgba(249,115,22,0.15)",
-        "Benign": "background-color: rgba(16,185,129,0.15)",
-        "Likely Benign": "background-color: rgba(52,211,153,0.15)",
+        "Pathogenic": "background-color: rgba(239,68,68,0.1)",
+        "Likely Pathogenic": "background-color: rgba(249,115,22,0.1)",
+        "Benign": "background-color: rgba(16,185,129,0.1)",
+        "Likely Benign": "background-color: rgba(52,211,153,0.1)",
     }
 
     def _highlight_class(row: pd.Series) -> list[str]:
@@ -261,7 +256,7 @@ def render(client: APIClient) -> None:
                 textinfo="label+value+percent",
                 textfont=dict(size=11),
             ))
-            fig_pie.update_layout(height=350, margin=dict(l=10, r=10, t=10, b=10), **PLOTLY_DARK)
+            fig_pie.update_layout(height=350, margin=dict(l=10, r=10, t=10, b=10), **PLOTLY_LIGHT)
             st.plotly_chart(fig_pie, use_container_width=True)
 
     with chart_cols[1]:
@@ -269,15 +264,15 @@ def render(client: APIClient) -> None:
         if "confidence" in results_df.columns:
             fig_hist = px.histogram(
                 results_df, x="confidence", nbins=20,
-                color_discrete_sequence=["#6366F1"],
+                color_discrete_sequence=["#4F46E5"],
                 labels={"confidence": "Confidence Score"},
             )
             fig_hist.update_layout(
                 height=350, margin=dict(l=10, r=10, t=10, b=30),
                 yaxis_title="Count",
-                xaxis=dict(gridcolor="rgba(99,102,241,0.1)"),
-                yaxis=dict(gridcolor="rgba(99,102,241,0.1)"),
-                **PLOTLY_DARK,
+                xaxis=dict(**GRID),
+                yaxis=dict(**GRID),
+                **PLOTLY_LIGHT,
             )
             st.plotly_chart(fig_hist, use_container_width=True)
 
@@ -293,7 +288,7 @@ def render(client: APIClient) -> None:
             color_continuous_scale="Purples",
             labels={"gene_symbol": "Gene", "count": "Count", "avg_confidence": "Avg Conf"},
         )
-        fig_gene.update_layout(height=350, margin=dict(l=10, r=10, t=10, b=30), **PLOTLY_DARK)
+        fig_gene.update_layout(height=350, margin=dict(l=10, r=10, t=10, b=30), **PLOTLY_LIGHT)
         st.plotly_chart(fig_gene, use_container_width=True)
 
     st.markdown("---")
