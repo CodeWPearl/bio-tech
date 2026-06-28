@@ -92,6 +92,57 @@ services:
               count: all
               capabilities: [gpu]
 
+  # --- FastAPI backend (port 8001) --------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cancer-pathogenicity-api
+    entrypoint: ["python", "-m"]
+    command:
+      - "uvicorn"
+      - "api.main:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8001"
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./api:/app/api
+      - ./src:/app/src
+      - ./results:/app/results
+      - ./configs:/app/configs
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  # --- Streamlit dashboard (port 8501) ---------------------------------------
+  webapp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cancer-pathogenicity-webapp
+    entrypoint: ["python", "-m"]
+    command:
+      - "streamlit"
+      - "run"
+      - "webapp/app.py"
+      - "--server.port"
+      - "8501"
+      - "--server.address"
+      - "0.0.0.0"
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./webapp:/app/webapp
+      - ./results:/app/results
+    environment:
+      - API_URL=http://api:8001
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - api
+
   # --- Test suite ------------------------------------------------------------
   test:
     build:
