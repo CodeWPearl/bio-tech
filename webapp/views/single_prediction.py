@@ -8,6 +8,7 @@ from pathlib import Path
 import plotly.graph_objects as go
 import streamlit as st
 
+from webapp.data.cancer_knowledge import get_cancer_info, get_pathogenicity_guidance
 from webapp.utils.api_client import APIClient
 from webapp.utils.export import export_to_json
 from webapp.utils.report_generator import generate_prediction_report
@@ -363,7 +364,83 @@ def _render_results(response: dict, request_data: dict) -> None:
             with link_cols[2]:
                 st.markdown(f"[UniProt](https://www.uniprot.org/uniprotkb?query={gene}+AND+organism_id:9606)")
 
-    # --- f) Export Section ---
+    # --- f) Treatment & Precautions ---
+    is_pathogenic = pred_class in ("Pathogenic", "Likely Pathogenic")
+    cancer_type = request_data.get("cancer_type")
+
+    guidance = get_pathogenicity_guidance(pred_class)
+    if guidance and is_pathogenic:
+        with st.expander("\U0001f4cb Pathogenicity Guidance", expanded=True):
+            sev_color = guidance["severity_color"]
+            st.markdown(
+                f"""
+                <div style="border-left:4px solid {sev_color};padding:0.8rem 1.2rem;
+                     background:{sev_color}10;border-radius:0 8px 8px 0;
+                     margin-bottom:1rem">
+                    <strong style="color:#1E293B !important">
+                    Severity: {guidance['severity']}</strong>
+                    <p style="color:#475569 !important;font-size:0.9rem;
+                       margin:0.4rem 0 0">{guidance['recommendation']}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            st.markdown("**Recommended Follow-up:**")
+            for item in guidance["follow_up"]:
+                st.markdown(f"- {item}")
+
+    if cancer_type and cancer_type in ("Breast Invasive Carcinoma",
+                                        "Lung Adenocarcinoma",
+                                        "Colorectal Adenocarcinoma",
+                                        "Uterine Corpus Endometrial Carcinoma",
+                                        "Ovarian Serous Cystadenocarcinoma"):
+        cancer_info = get_cancer_info(cancer_type)
+        if cancer_info:
+            with st.expander(
+                f"\U0001f3e5 Treatment & Precautions — {cancer_type}",
+                expanded=is_pathogenic,
+            ):
+                st.markdown(
+                    f"""
+                    <div style="background:#FEF3C7;border:1px solid #FCD34D;
+                         border-radius:8px;padding:0.7rem 1rem;margin-bottom:1rem;
+                         font-size:0.8rem;color:#92400E !important">
+                    ⚠️ Research tool — consult healthcare professionals for
+                    medical decisions.
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                st.markdown(f"**Overview:** {cancer_info['overview'][:300]}...")
+
+                st.markdown("**Key Precautions:**")
+                for prec in cancer_info["precautions"][:3]:
+                    st.markdown(
+                        f"- **{prec['category']}:** {prec['detail'][:120]}..."
+                    )
+
+                st.markdown("**Treatment Options:**")
+                for tx in cancer_info["treatment_options"][:3]:
+                    st.markdown(
+                        f"- **{tx['name']}** ({tx['stage']}): "
+                        f"{tx['description'][:100]}..."
+                    )
+
+                survival = cancer_info.get("survival_rates", {})
+                if survival:
+                    st.markdown("**5-Year Survival Rates:**")
+                    rate_text = " | ".join(
+                        f"{stage}: {rate}" for stage, rate in survival.items()
+                    )
+                    st.markdown(f"> {rate_text}")
+
+                st.info(
+                    "View the **Cure Options** page in the sidebar for "
+                    "complete treatment details, clinical trials, and resources."
+                )
+
+    # --- g) Export Section ---
     st.markdown("---")
     exp_cols = st.columns(2)
     variant_id = response.get("variant_id", "variant")
