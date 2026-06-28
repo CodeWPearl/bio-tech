@@ -1,0 +1,21 @@
+gene_symbol,mutation_type,chromosome,start_position,reference_allele,variant_allele,protein_change,cancer_type
+BRCA1,Missense_Mutation,17,43044295,A,T,p.C61G,Breast Invasive Carcinoma
+TP53,Nonsense_Mutation,17,7577538,C,T,p.R213*,Lung Adenocarcinoma
+BRAF,Missense_Mutation,7,140753336,A,T,p.V600E,Skin Cutaneous Melanoma
+KRAS,Missense_Mutation,12,25398284,C,A,p.G12V,Pancreatic Adenocarcinoma
+EGFR,Missense_Mutation,7,55259515,T,G,p.L858R,Lung Adenocarcinoma
+PIK3CA,Missense_Mutation,3,178936091,G,A,p.E545K,Breast Invasive Carcinoma
+PTEN,Frame_Shift_Del,10,89692905,C,-,p.K267fs,Glioblastoma Multiforme
+APC,Nonsense_Mutation,5,112175211,C,T,p.R1450*,Colon Adenocarcinoma
+RB1,Splice_Site,13,48367556,G,T,,Retinoblastoma
+BRCA2,Frame_Shift_Ins,13,32911463,-,A,p.E1857fs,Ovarian Serous Cystadenocarcinoma
+VHL,Missense_Mutation,3,10183748,G,A,p.R167Q,Kidney Renal Clear Cell Carcinoma
+MLH1,Nonsense_Mutation,3,37053568,C,T,p.R100*,Colon Adenocarcinoma
+CDH1,Missense_Mutation,16,68835630,G,A,p.A634V,Stomach Adenocarcinoma
+MET,Missense_Mutation,7,116411990,T,C,p.T1010I,Lung Adenocarcinoma
+IDH1,Missense_Mutation,2,209113112,C,T,p.R132H,Glioblastoma Multiforme
+ERBB2,In_Frame_Ins,17,37880995,-,GGCTCCCCA,p.A775_G776insYVMA,Breast Invasive Carcinoma
+NF1,Frame_Shift_Del,17,31226576,G,-,p.R1276fs,Glioblastoma Multiforme
+KIT,Missense_Mutation,4,55593464,A,T,p.D816V,Acute Myeloid Leukemia
+SMAD4,Missense_Mutation,18,48584855,G,A,p.R361H,Pancreatic Adenocarcinoma
+ATM,Nonsense_Mutation,11,108186638,C,T,p.R337*,Breast Invasive Carcinoma

@@ -36,6 +36,7 @@ data/raw/*
 data/processed/*
 data/splits/*
 *.csv
+!webapp/sample_data/*.csv
 *.tsv
 *.gz
 *.vcf

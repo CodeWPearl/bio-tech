@@ -1,0 +1,12 @@
+{
+  "gene_symbol": "BRAF",
+  "mutation_type": "Missense_Mutation",
+  "chromosome": "7",
+  "start_position": 140753336,
+  "reference_allele": "A",
+  "variant_allele": "T",
+  "protein_change": "p.V600E",
+  "cancer_type": "Skin Cutaneous Melanoma",
+  "include_explanation": true,
+  "include_uncertainty": true
+}
