@@ -210,7 +210,34 @@ def render(client: APIClient) -> None:
 
     st.markdown("---")
     st.subheader("Results Table")
-    st.dataframe(results_df, use_container_width=True, height=400)
+
+    input_df = st.session_state.get("batch_df")
+    if input_df is not None:
+        display_df = pd.concat(
+            [
+                input_df.reset_index(drop=True),
+                results_df[["predicted_class", "confidence"]].reset_index(drop=True),
+            ],
+            axis=1,
+        )
+        if "epistemic_uncertainty" in results_df.columns:
+            display_df["uncertainty"] = results_df["epistemic_uncertainty"].values
+    else:
+        display_df = results_df
+
+    _CLASS_BG = {
+        "Pathogenic": "background-color: rgba(239,68,68,0.15)",
+        "Likely Pathogenic": "background-color: rgba(249,115,22,0.15)",
+        "Benign": "background-color: rgba(16,185,129,0.15)",
+        "Likely Benign": "background-color: rgba(52,211,153,0.15)",
+    }
+
+    def _highlight_class(row: pd.Series) -> list[str]:
+        style = _CLASS_BG.get(row.get("predicted_class", ""), "")
+        return [style] * len(row)
+
+    styled_display = display_df.style.apply(_highlight_class, axis=1)
+    st.dataframe(styled_display, use_container_width=True, height=400)
 
     chart_cols = st.columns(2)
     with chart_cols[0]:
