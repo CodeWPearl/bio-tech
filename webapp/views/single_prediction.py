@@ -11,14 +11,7 @@ import streamlit as st
 from webapp.utils.api_client import APIClient
 from webapp.utils.export import export_to_json
 from webapp.utils.report_generator import generate_prediction_report
-from webapp.utils.styling import get_class_color, get_confidence_color
-
-PLOTLY_DARK = dict(
-    plot_bgcolor="rgba(0,0,0,0)",
-    paper_bgcolor="rgba(0,0,0,0)",
-    font_color="#CBD5E1",
-    font_family="Inter, sans-serif",
-)
+from webapp.utils.styling import PLOTLY_LIGHT, get_class_color, get_confidence_color
 
 MUTATION_TYPES = [
     "Missense_Mutation",
@@ -168,7 +161,7 @@ def _render_results(response: dict, request_data: dict) -> None:
     st.markdown(
         f"""
         <div class="result-card" style="border-left: 5px solid {color}; text-align:center;">
-            <span class="prediction-badge" style="background:linear-gradient(135deg,{color},{color}CC);">
+            <span class="prediction-badge" style="background:{color};">
                 {pred_class.upper()}
             </span>
             <div style="margin-top:1.2rem;">
@@ -178,9 +171,9 @@ def _render_results(response: dict, request_data: dict) -> None:
                 <span style="color:#64748B;font-size:0.9rem;margin-left:6px">confidence</span>
             </div>
             <div style="margin-top:0.3rem;">
-                <div style="background:rgba(255,255,255,0.05);border-radius:50px;height:8px;
+                <div style="background:#F1F5F9;border-radius:50px;height:8px;
                      width:80%;margin:0.5rem auto;overflow:hidden">
-                    <div style="background:linear-gradient(90deg,{conf_color},{conf_color}88);
+                    <div style="background:{conf_color};
                          height:100%;width:{confidence * 100}%;border-radius:50px;
                          transition:width 0.5s ease"></div>
                 </div>
@@ -215,8 +208,8 @@ def _render_results(response: dict, request_data: dict) -> None:
             height=200,
             margin=dict(l=10, r=10, t=10, b=30),
             yaxis=dict(autorange="reversed"),
-            xaxis=dict(gridcolor="rgba(99,102,241,0.1)"),
-            **PLOTLY_DARK,
+            xaxis=dict(gridcolor="#E2E8F0"),
+            **PLOTLY_LIGHT,
         )
         st.plotly_chart(fig, use_container_width=True)
 
@@ -234,7 +227,7 @@ def _render_results(response: dict, request_data: dict) -> None:
                 gauge_pct = min(epistemic * 500, 100)
                 gauge_color = "#10B981" if gauge_pct < 30 else ("#F59E0B" if gauge_pct < 60 else "#EF4444")
                 st.markdown(
-                    f"""<div style="background:rgba(255,255,255,0.05);border-radius:50px;
+                    f"""<div style="background:#F1F5F9;border-radius:50px;
                     height:8px;width:100%;overflow:hidden">
                     <div style="background:{gauge_color};border-radius:50px;
                     height:100%;width:{gauge_pct}%"></div>
@@ -245,10 +238,9 @@ def _render_results(response: dict, request_data: dict) -> None:
                 st.metric("Predictive Entropy", f"{entropy:.4f}")
             with u_cols[2]:
                 cal_text = "Calibrated" if calibrated else "Uncalibrated"
-                cal_color = "#10B981" if calibrated else "#F59E0B"
                 st.metric("Calibration", cal_text)
-                level_colors = {"High": "#10B981", "Medium": "#F59E0B", "Low": "#EF4444"}
-                lc = level_colors.get(conf_level, "#94A3B8")
+                level_colors = {"High": "#059669", "Medium": "#D97706", "Low": "#DC2626"}
+                lc = level_colors.get(conf_level, "#64748B")
                 st.markdown(
                     f'<span style="color:{lc};font-weight:700;font-size:0.9rem">'
                     f'{conf_level} Confidence</span>',
@@ -275,7 +267,7 @@ def _render_results(response: dict, request_data: dict) -> None:
                     labels=labels,
                     values=values,
                     hole=0.55,
-                    marker_colors=["#6366F1", "#8B5CF6", "#EC4899", "#F59E0B", "#10B981"][:len(labels)],
+                    marker_colors=["#4F46E5", "#7C3AED", "#EC4899", "#F59E0B", "#10B981"][:len(labels)],
                     textinfo="label+percent",
                     textfont=dict(size=11),
                 ))
@@ -284,7 +276,7 @@ def _render_results(response: dict, request_data: dict) -> None:
                     margin=dict(l=10, r=10, t=10, b=10),
                     showlegend=True,
                     legend=dict(orientation="h", yanchor="bottom", y=-0.2, font=dict(size=10)),
-                    **PLOTLY_DARK,
+                    **PLOTLY_LIGHT,
                 )
                 st.plotly_chart(fig_donut, use_container_width=True)
 
@@ -308,15 +300,15 @@ def _render_results(response: dict, request_data: dict) -> None:
                         y=all_names,
                         orientation="h",
                         marker_color=bar_colors,
-                        textfont=dict(color="#CBD5E1"),
+                        textfont=dict(color="#1E293B"),
                     ))
                     fig_feat.update_layout(
                         xaxis_title="Feature Importance",
                         height=max(180, len(all_names) * 30),
                         margin=dict(l=10, r=10, t=10, b=30),
                         yaxis=dict(autorange="reversed"),
-                        xaxis=dict(gridcolor="rgba(99,102,241,0.1)"),
-                        **PLOTLY_DARK,
+                        xaxis=dict(gridcolor="#E2E8F0"),
+                        **PLOTLY_LIGHT,
                     )
                     st.plotly_chart(fig_feat, use_container_width=True)
 
@@ -337,7 +329,7 @@ def _render_results(response: dict, request_data: dict) -> None:
                 fig_att.update_layout(
                     height=120,
                     margin=dict(l=10, r=10, t=10, b=30),
-                    **PLOTLY_DARK,
+                    **PLOTLY_LIGHT,
                 )
                 st.plotly_chart(fig_att, use_container_width=True)
 
@@ -439,7 +431,7 @@ def render(client: APIClient) -> None:
                     <div style="font-size:4rem;margin-bottom:1rem;
                          opacity:0.6;filter:grayscale(30%)">\U0001f9ec</div>
                     <p style="font-size:1.2rem;color:#64748B !important;margin:0">
-                        Enter a variant and click <strong style="color:#A5B4FC !important">
+                        Enter a variant and click <strong style="color:#4F46E5 !important">
                         Predict Pathogenicity</strong> to see results here
                     </p>
                 </div>
