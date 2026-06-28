@@ -47,30 +47,9 @@ def styled_metric_card(
 
     icon_html = ""
     if icon:
-        icon_html = f'<span style="font-size:1.6rem;margin-bottom:0.3rem">{icon}</span>'
+        icon_html = f'<span style="font-size:1.6rem;display:block;margin-bottom:0.3rem">{icon}</span>'
 
-    return f"""
-    <div style="
-        background: rgba(255,255,255,0.7);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid rgba(255,255,255,0.3);
-        border-radius: 16px;
-        padding: 1.3rem 1.2rem;
-        text-align: center;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-        box-shadow: 0 4px 24px rgba(0,0,0,0.06);
-    ">
-        {icon_html}
-        <p style="color:#94A3B8;font-size:0.7rem;margin:0 0 0.4rem 0;
-                  text-transform:uppercase;letter-spacing:0.1em;font-weight:600">{title}</p>
-        <p style="color:#1E293B;font-size:1.6rem;font-weight:800;margin:0;
-                  line-height:1.2">{value}</p>
-        {delta_html}
-        <div style="width:40px;height:3px;background:linear-gradient(90deg,{accent},{accent}44);
-             border-radius:2px;margin:0.5rem auto 0"></div>
-    </div>
-    """
+    return f"""<div style="background:rgba(30,27,75,0.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(99,102,241,0.15);border-radius:16px;padding:1.3rem 1.2rem;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.15);border-top:3px solid {accent}">{icon_html}<p style="color:#94A3B8;font-size:0.7rem;margin:0 0 0.4rem 0;text-transform:uppercase;letter-spacing:0.1em;font-weight:600">{title}</p><p style="color:#F1F5F9;font-size:1.6rem;font-weight:800;margin:0;line-height:1.2">{value}</p>{delta_html}</div>"""
 
 
 def get_custom_css() -> str:
