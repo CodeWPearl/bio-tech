@@ -11,7 +11,7 @@ import streamlit as st
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_API_URL = "http://localhost:8000"
+DEFAULT_API_URL = "http://localhost:8001"
 
 
 class APIClient:
